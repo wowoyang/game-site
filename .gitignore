@@ -1,0 +1,11 @@
+# ---- game_site 专用 ----
+logs/
+*.log
+__pycache__/
+*.pyc
+games.db
+games.db-wal
+games.db-shm
+*.db-wal
+*.db-shm
+.claude/

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steam 全量深研 · Game Trend Radar</title>
+<script src="/game/static/echarts.min.js"></script>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--dim:#6e7681;--accent:#58a6ff;--hot:#f85149;--up:#3fb950;--down:#f85149;--gold:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px}
+.wrap{max-width:1440px;margin:0 auto;padding:18px}
+h1{font-size:20px;margin-bottom:4px}
+h1 .sub{font-size:12px;color:var(--dim);font-weight:400;margin-left:8px}
+a{color:var(--accent);text-decoration:none}
+.back{font-size:12px;margin-bottom:14px;display:inline-block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+.card h2{font-size:15px;margin-bottom:12px;font-weight:600}
+.card h2 .src{font-size:11px;color:var(--dim);font-weight:400;margin-left:8px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1000px){.grid-2{grid-template-columns:1fr}}
+.chart{width:100%;height:340px}
+.legend-note{font-size:11px;color:var(--dim);line-height:1.7;margin-top:8px}
+.filters{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.f-group{display:flex;flex-direction:column;gap:4px}
+.f-group label{font-size:11px;color:var(--muted)}
+.f-group select,.f-group input{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;min-width:110px}
+.scope-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.scope-seg button{background:transparent;border:none;color:var(--muted);padding:5px 14px;font-size:12px;cursor:pointer}
+.scope-seg button.on{background:#58a6ff2e;color:var(--accent)}
+.tag-toggles{display:flex;flex-wrap:wrap;gap:4px;max-width:640px}
+.tag-tg{padding:2px 9px;border-radius:10px;border:1px solid var(--border);font-size:11px;color:var(--muted);cursor:pointer;user-select:none}
+.tag-tg.on{border-color:var(--accent);color:var(--accent);background:#58a6ff1a}
+.tag-tg:hover{border-color:var(--accent)}
+.f-count{font-size:12px;color:var(--muted)}
+.f-count b{color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:2}
+td{padding:6px 8px;border-bottom:1px solid #21262d;vertical-align:top}
+tr:hover td{background:#1c2129}
+.num-r{text-align:right;font-variant-numeric:tabular-nums}
+.gname{color:var(--accent);cursor:pointer;font-weight:500}
+.gname:hover{text-decoration:underline}
+.gcn{color:var(--gold);font-weight:500;font-size:11px;margin-left:4px}
+.gsub{font-size:10px;color:var(--dim);margin-top:2px}
+.sortable{cursor:pointer}
+.sortable:hover{color:var(--accent)}
+.chg-up{color:var(--up);font-size:11px}
+.chg-down{color:var(--down);font-size:11px}
+.pill{display:inline-block;padding:0 7px;border-radius:10px;font-size:10px;border:1px solid var(--border);color:var(--muted);margin:1px 2px;white-space:nowrap}
+.pill.hot{border-color:#f8514966;color:var(--hot)}
+.pill.new{border-color:#3fb95066;color:var(--up)}
+.table-scroll{max-height:560px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px}
+.stat .num{font-size:20px;font-weight:700;color:var(--accent)}
+.stat .lbl{font-size:10px;color:var(--dim);margin-top:2px}
+.pager{display:flex;gap:6px;align-items:center;justify-content:center;padding:12px 0 4px;flex-wrap:wrap}
+.pager button{background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px}
+.pager button:disabled{opacity:.4;cursor:default}
+.pager .pg-info{font-size:12px;color:var(--muted);margin:0 8px}
+#modal-mask{position:fixed;inset:0;background:#000a;display:none;z-index:99;align-items:center;justify-content:center}
+#modal-mask.show{display:flex}
+#modal{background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:720px;width:92%;max-height:86vh;overflow-y:auto;padding:20px}
+#modal h3{font-size:17px;margin-bottom:6px}
+#modal .sub{font-size:12px;color:var(--dim);margin-bottom:12px}
+#modal .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:12px 0}
+#modal .item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px}
+#modal .k{font-size:10px;color:var(--dim)}
+#modal .v{font-size:14px;font-weight:600;margin-top:2px}
+#modal-close{float:right;cursor:pointer;color:var(--dim);font-size:18px}
+.loading{color:var(--dim);padding:30px;text-align:center}
+.empty-tip{color:var(--dim);padding:20px;text-align:center;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/game">← 返回游戏趋势雷达</a>
+  <h1>🔬 Steam 全量深研 <span class="sub" id="uni-sub">全量游戏宇宙 · 官方 API 直接观测 · 无估算</span></h1>
+
+  <div class="stats-row" id="sr-stats"></div>
+
+  <div class="card">
+    <h2>🎛️ 研究筛选 <span class="src">全量宇宙 · 自由组合过滤 · 服务端查询分页</span></h2>
+    <div class="filters">
+      <div class="f-group"><label>研究范围</label>
+        <div class="scope-seg" id="f-scope">
+          <button data-v="active" class="on">活跃游戏</button>
+          <button data-v="ranked">官方榜 Top100</button>
+          <button data-v="all">全量宇宙</button>
+          <button data-v="indie">🧩 独立游戏</button>
+          <button data-v="aaa">🏢 3A 游戏</button>
+        </div>
+      </div>
+      <div class="f-group"><label>类型（多选）</label><div class="tag-toggles" id="f-genres"></div></div>
+      <div class="f-group"><label>标签（多选）</label><div class="tag-toggles" id="f-tags"></div></div>
+      <div class="f-group"><label>厂商（多选）</label><div class="tag-toggles" id="f-devs"></div></div>
+      <div class="f-group"><label>发行年份</label><select id="f-year"><option value="">全部</option></select></div>
+      <div class="f-group"><label>价格档</label><select id="f-price"><option value="">全部</option><option value="free">免费</option><option value="paid">付费</option><option value="p20">≤$20</option><option value="p40">$20-40</option><option value="p40+">$40+</option></select></div>
+      <div class="f-group"><label>好评率 ≥</label><select id="f-score"><option value="">全部</option><option value="70">70%</option><option value="80">80%</option><option value="90">90%</option></select></div>
+      <div class="f-group"><label>排序</label><select id="f-sort">
+        <option value="peak_in_game">峰值在线</option>
+        <option value="rank">官方榜名次</option>
+        <option value="reviews_total">评论数</option>
+        <option value="positive">好评数</option>
+        <option value="ccu">当前在线</option>
+        <option value="avg_playtime_2w">两周均时</option>
+        <option value="avg_playtime_forever">历史均时</option>
+        <option value="price_usd">价格</option>
+        <option value="userscore">好评率</option>
+        <option value="name">名称</option>
+      </select></div>
+      <div class="f-group"><label>搜索</label><input id="f-search" placeholder="游戏名/中文名/厂商 回车"></div>
+      <div class="f-group"><label>&nbsp;</label><span class="f-count" id="f-count"></span></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card"><h2>🏆 峰值在线集中度（帕累托） <span class="src">谁在吸走玩家注意力</span></h2><div id="c-pareto" class="chart"></div></div>
+    <div class="card"><h2>💰 价格 × 好评率 <span class="src">点=游戏，点大小=拥有量；点击开详情</span></h2><div id="c-price-score" class="chart"></div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h2>📏 游玩深度对比 <span class="src">两周均时 vs 历史均时（对角线上方=近期升温）</span></h2><div id="c-playtime" class="chart"></div></div>
+    <div class="card"><h2>📅 发行年份分布 <span class="src">本页样本按年份 × 数量 / 峰值合计</span></h2><div id="c-years" class="chart"></div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h2>🏷️ 玩法标签份额 <span class="src">本页样本玩家投票覆盖</span></h2><div id="c-tags" class="chart"></div></div>
+    <div class="card"><h2>🏭 厂商格局 <span class="src">按旗下游戏峰值在线合计 Top15（本页样本）</span></h2><div id="c-devs" class="chart"></div></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 全字段明细 <span class="src">全量宇宙 · 服务端排序分页 · 点列头排序 · 点游戏名开详情</span></h2>
+    <div class="table-scroll"><table id="t-detail"></table></div>
+    <div class="pager" id="pager"></div>
+    <div class="legend-note">强度 = 近两周平均游玩时长 ÷ 历史平均（&gt;1 = 近期热度高于历史）；拥有量取 SteamSpy 区间中值仅用于排序/散点大小；图表基于当前页 50 款样本聚合。全部底层字段为官方 API 直接观测（Valve 官方榜 / appdetails / SteamSpy）。</div>
+  </div>
+</div>
+
+<div id="modal-mask" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <span id="modal-close" onclick="closeModal()">✕</span>
+    <div id="modal-body"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>n==null?'—':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n;
+const CHARTS={};
+function chartOf(id){const el=$(id);if(!el)return null;if(CHARTS[id]&&CHARTS[id].getDom()!==el){CHARTS[id].dispose();delete CHARTS[id]}if(!CHARTS[id])CHARTS[id]=echarts.init(el);return CHARTS[id]}
+window.addEventListener('resize',()=>Object.values(CHARTS).forEach(c=>{try{c.resize()}catch(e){}}));
+
+let FACETS=null;
+let STATE={scope:'active',genres:new Set(),tags:new Set(),devs:new Set(),year:'',price:'',score:'',search:'',sort:'peak_in_game',dir:'desc',page:0};
+let PAGE_DATA=null;
+
+async function boot(){
+  try{
+    const j=await (await fetch('/game/api/steam-facets')).json();
+    if(!j.ok){$('sr-stats').innerHTML='<span class="empty-tip">'+esc(j.msg)+'</span>';return}
+    FACETS=j;
+    const sc=j.scopes||{};
+    $('uni-sub').textContent='全量宇宙 '+fmt(j.universe)+' 款 · 今日活跃 '+fmt(j.active)+' 款'
+      +(sc.indie?' · 独立 '+fmt(sc.indie.n)+' 款(官方自标 Indie)':'')
+      +(sc.aaa?' · 3A '+fmt(sc.aaa.n)+' 款(大厂发行商)':'')
+      +' · 官方 API 直接观测 · 无估算';
+    buildFilters();
+    await apply();
+  }catch(e){$('sr-stats').innerHTML='<span class="empty-tip">加载失败: '+esc(e.message)+'</span>'}
+}
+
+function buildFilters(){
+  document.querySelectorAll('#f-scope button').forEach(b=>{
+    b.onclick=()=>{document.querySelectorAll('#f-scope button').forEach(x=>x.classList.remove('on'));b.classList.add('on');STATE.scope=b.dataset.v;STATE.page=0;apply()};
+  });
+  mkToggles('f-genres',FACETS.genres,STATE.genres,12);
+  mkToggles('f-tags',FACETS.tags,STATE.tags,18);
+  mkToggles('f-devs',FACETS.devs,STATE.devs,12);
+  FACETS.years.filter(y=>/^\d{4}$/.test(y.v)).forEach(y=>{
+    const o=document.createElement('option');o.value=y.v;o.textContent=y.v+' ('+y.n+')';$('f-year').appendChild(o)});
+  $('f-year').onchange=e=>{STATE.year=e.target.value;STATE.page=0;apply()};
+  $('f-price').onchange=e=>{STATE.price=e.target.value;STATE.page=0;apply()};
+  $('f-score').onchange=e=>{STATE.score=e.target.value;STATE.page=0;apply()};
+  $('f-sort').onchange=e=>{STATE.sort=e.target.value;STATE.page=0;apply()};
+  $('f-search').addEventListener('keydown',e=>{if(e.key==='Enter'){STATE.search=e.target.value.trim();STATE.page=0;apply()}});
+  $('f-search').addEventListener('change',e=>{if(!e.target.value.trim()){STATE.search='';STATE.page=0;apply()}});
+}
+function mkToggles(id,items,set,limit){
+  const el=$(id);el.innerHTML='';
+  items.slice(0,limit).forEach(it=>{
+    const b=document.createElement('span');b.className='tag-tg';b.textContent=it.v+' '+it.n;
+    b.onclick=()=>{set.has(it.v)?set.delete(it.v):set.add(it.v);b.classList.toggle('on');STATE.page=0;apply()};
+    el.appendChild(b);
+  });
+}
+
+async function apply(){
+  const p=new URLSearchParams();
+  if(STATE.scope==='active')p.set('active','1');
+  if(STATE.scope==='ranked')p.set('ranked','1');
+  if(STATE.scope==='indie')p.set('scope','indie');
+  if(STATE.scope==='aaa')p.set('scope','aaa');
+  if(STATE.genres.size)p.set('genre',[...STATE.genres].join(','));
+  if(STATE.tags.size)p.set('tag',[...STATE.tags].join(','));
+  if(STATE.devs.size)p.set('dev',[...STATE.devs].join(','));
+  if(STATE.year)p.set('year',STATE.year);
+  if(STATE.price)p.set('price',STATE.price);
+  if(STATE.score)p.set('score',STATE.score);
+  if(STATE.search)p.set('q',STATE.search);
+  p.set('sort',STATE.sort);p.set('dir',STATE.dir);p.set('page',STATE.page);
+  $('f-count').textContent='查询中…';
+  try{
+    const j=await (await fetch('/game/api/steam-universe?'+p.toString())).json();
+    if(!j.ok)throw new Error(j.msg||'查询失败');
+    PAGE_DATA=j;
+    renderStats(j);
+    renderDetail(j);
+    renderPager(j);
+    renderCharts(j.games);
+  }catch(e){
+    $('f-count').textContent='';
+    $('t-detail').innerHTML='<tr><td colspan="13" class="loading">查询失败: '+esc(e.message)+'</td></tr>';
+  }
+}
+
+function renderStats(j){
+  const med=a=>{const b=a.filter(x=>x!=null).sort((x,y)=>x-y);return b.length?b[b.length>>1]:null};
+  const gs=j.games;
+  const totPeak=gs.reduce((s,g)=>s+(g.peak_in_game||0),0);
+  const mu=med(gs.map(g=>g.userscore));
+  const mp=med(gs.map(g=>g.price_usd));
+  const mh=med(gs.map(g=>g.avg_playtime_2w!=null?g.avg_playtime_2w/60:null));
+  $('sr-stats').innerHTML=
+    '<div class="stat"><div class="num">'+fmt(j.total)+'</div><div class="lbl">命中样本（全宇宙）</div></div>'+
+    '<div class="stat"><div class="num">'+fmt(gs.length)+'</div><div class="lbl">本页样本</div></div>'+
+    '<div class="stat"><div class="num">'+fmt(totPeak)+'</div><div class="lbl">峰值在线合计(本页)</div></div>'+
+    '<div class="stat"><div class="num">'+(mu==null?'—':mu.toFixed(0)+'%')+'</div><div class="lbl">好评率中位(本页)</div></div>'+
+    '<div class="stat"><div class="num">'+(mp==null?'—':'$'+mp)+'</div><div class="lbl">价格中位(本页)</div></div>'+
+    '<div class="stat"><div class="num">'+(mh==null?'—':mh.toFixed(1)+'h')+'</div><div class="lbl">两周均时中位(本页)</div></div>';
+  $('f-count').innerHTML='命中 <b>'+fmt(j.total)+'</b> 款 · 第 '+(j.page+1)+'/'+Math.max(1,Math.ceil(j.total/j.size))+' 页';
+}
+
+const COLS=[
+  ['name','游戏',''],
+  ['rank','榜','num-r'],['peak_in_game','峰值在线','num-r'],['ccu','当前在线','num-r'],
+  ['reviews_total','评论数','num-r'],['positive','好评数','num-r'],['userscore','好评率','num-r'],
+  ['price_usd','价格','num-r'],['owners_num','拥有量','num-r'],
+  ['avg_playtime_2w','两周均时','num-r'],['intensity','强度','num-r']
+];
+function renderDetail(j){
+  let th='<tr><th class="sortable" data-k="name">游戏</th>';
+  for(const [k,lbl,cls] of COLS.slice(1))th+='<th class="num-r sortable" data-k="'+k+'">'+lbl+'</th>';
+  th+='<th>类型/标签</th></tr>';
+  const tr=j.games.map(g=>{
+    let row='<tr><td><div class="gname" onclick="openDetail(\''+esc(g.game_id)+'\')">'+esc(g.name)+(g.name_cn?'<span class="gcn">'+esc(g.name_cn)+'</span>':'')+'</div><div class="gsub">'+esc(g.developer||'')+'</div></td>';
+    row+='<td class="num-r">'+(g.rank?'#'+g.rank:'—')+'</td>';
+    row+='<td class="num-r">'+fmt(g.peak_in_game)+'</td>';
+    row+='<td class="num-r">'+fmt(g.ccu)+'</td>';
+    row+='<td class="num-r">'+fmt(g.reviews_total)+'</td>';
+    row+='<td class="num-r">'+fmt(g.positive)+'</td>';
+    row+='<td class="num-r">'+(g.userscore!=null?g.userscore+'%':'—')+'</td>';
+    row+='<td class="num-r">'+(g.price_usd!=null?(g.price_usd===0?'免费':'$'+g.price_usd):'—')+'</td>';
+    row+='<td class="num-r">'+(g.owners?'<span title="'+esc(g.owners)+'">'+fmt(g.owners_num)+'</span>':'—')+'</td>';
+    row+='<td class="num-r">'+(g.avg_playtime_2w!=null?(g.avg_playtime_2w/60).toFixed(1)+'h':'—')+'</td>';
+    row+='<td class="num-r">'+(g.intensity!=null?g.intensity:'—')+'</td>';
+    row+='<td>'+((g.genres||[]).slice(0,3).map(x=>'<span class="pill">'+esc(x)+'</span>').join(''))+((g.tag_list&&g.tag_list.length)?'<div class="gsub">'+esc(g.tag_list.slice(0,4).join(' · '))+'</div>':'')+'</td></tr>';
+    return row;
+  }).join('');
+  $('t-detail').innerHTML=th+tr;
+  document.querySelectorAll('#t-detail th.sortable').forEach(t=>{
+    t.onclick=()=>{const k=t.dataset.k;
+      if(STATE.sort===k)STATE.dir=STATE.dir==='desc'?'asc':'desc';else{STATE.sort=k;STATE.dir='desc'}
+      STATE.page=0;apply()};
+  });
+}
+
+function renderPager(j){
+  const pages=Math.ceil(j.total/j.size);
+  if(pages<=1){$('pager').innerHTML='';return}
+  let h='<button '+(j.page===0?'disabled':'')+' onclick="goPage('+(j.page-1)+')">‹ 上一页</button>';
+  const start=Math.max(0,j.page-3),end=Math.min(pages-1,j.page+3);
+  for(let p=start;p<=end;p++)h+='<button '+(p===j.page?'style="color:var(--accent);border-color:var(--accent)"':'')+' onclick="goPage('+p+')">'+(p+1)+'</button>';
+  h+='<button '+(j.page>=pages-1?'disabled':'')+' onclick="goPage('+(j.page+1)+')">下一页 ›</button>';
+  h+='<span class="pg-info">'+fmt(j.total)+' 款 / '+pages+' 页</span>';
+  $('pager').innerHTML=h;
+}
+function goPage(p){STATE.page=p;apply();document.querySelector('.table-scroll').scrollIntoView({behavior:'smooth'})}
+
+function renderCharts(gs){
+  renderPareto(gs);renderPriceScore(gs);renderPlaytime(gs);
+  renderYears(gs);renderTags(gs);renderDevs(gs);
+}
+function renderPareto(sel){
+  const arr=[...sel].filter(g=>g.peak_in_game).sort((a,b)=>b.peak_in_game-a.peak_in_game);
+  const total=arr.reduce((s,g)=>s+g.peak_in_game,0)||1;
+  let cum=0;
+  const data=arr.slice(0,25).map((g,i)=>{cum+=g.peak_in_game;return{name:g.name_cn||g.name,value:g.peak_in_game,pct:+(cum/total*100).toFixed(1),idx:i+1}});
+  chartOf('c-pareto').setOption({
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>{const d=ps[0].data;return d.idx+'. '+esc(d.name)+'<br>峰值 '+fmt(d.value)+'<br>累计占比 '+d.pct+'%'}},
+    grid:{left:56,right:56,top:30,bottom:56},
+    xAxis:{type:'category',data:data.map(d=>d.idx),axisLabel:{color:'#8b949e'}},
+    yAxis:[{type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},{type:'value',max:100,axisLabel:{formatter:'{value}%',color:'#d29922'},splitLine:{show:false}}],
+    series:[
+      {type:'bar',data:data,barMaxWidth:26,itemStyle:{color:'#58a6ff'}},
+      {type:'line',yAxisIndex:1,data:data.map(d=>d.pct),smooth:true,itemStyle:{color:'#d29922'},lineStyle:{color:'#d29922'}}
+    ]
+  },true);
+  if(arr.length>25&&data.length){
+    chartOf('c-pareto').setOption({graphic:[{type:'text',left:'center',bottom:4,style:{text:'Top25 已占 '+data[data.length-1].pct+'%（本页样本 '+arr.length+' 款）',fill:'#6e7681',fontSize:11}}]});
+  }
+}
+function renderPriceScore(sel){
+  const arr=sel.filter(g=>g.userscore!=null&&g.price_usd!=null);
+  const ch=chartOf('c-price-score');
+  ch.setOption({
+    tooltip:{formatter:p=>esc(p.data.name)+'<br>价格 $'+p.data.price+'｜好评 '+p.data.score+'%<br>拥有 '+fmt(p.data.owners||null)+'｜评论 '+fmt(p.data.reviews)},
+    grid:{left:50,right:30,top:30,bottom:50},
+    xAxis:{name:'价格($)',nameLocation:'middle',nameGap:28,nameTextStyle:{color:'#8b949e'},type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    yAxis:{name:'好评率',nameTextStyle:{color:'#8b949e'},min:40,max:100,axisLabel:{color:'#8b949e',formatter:'{value}%'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[{type:'scatter',symbolSize:d=>Math.sqrt(d[2]||1)/60+6,
+      data:arr.map(g=>({value:[g.price_usd,g.userscore,Math.sqrt(g.owners_num||1)],name:g.name_cn||g.name,price:g.price_usd,score:g.userscore,owners:g.owners_num,reviews:g.reviews_total,gameId:g.game_id})),
+      itemStyle:{color:'rgba(88,166,255,.65)',borderColor:'#58a6ff'}}]
+  },true);
+  ch.off('click');ch.on('click',p=>{if(p.data&&p.data.gameId)openDetail(p.data.gameId)});
+}
+function renderPlaytime(sel){
+  const arr=sel.filter(g=>g.avg_playtime_2w&&g.avg_playtime_forever);
+  const ch=chartOf('c-playtime');
+  ch.setOption({
+    tooltip:{formatter:p=>esc(p.data.name)+'<br>两周 '+p.data.v2w+'h｜历史 '+p.data.vf+'h<br>强度 '+p.data.intensity},
+    grid:{left:50,right:30,top:30,bottom:50},
+    xAxis:{name:'历史均时(h)',nameLocation:'middle',nameGap:28,nameTextStyle:{color:'#8b949e'},type:'log',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    yAxis:{name:'两周均时(h)',nameTextStyle:{color:'#8b949e'},type:'log',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[{type:'scatter',
+      data:arr.map(g=>({value:[g.avg_playtime_forever/60,g.avg_playtime_2w/60],name:g.name_cn||g.name,v2w:(g.avg_playtime_2w/60).toFixed(1),vf:(g.avg_playtime_forever/60).toFixed(1),intensity:g.intensity,gameId:g.game_id})),
+      itemStyle:{color:p=>p.data.value[1]>=p.data.value[0]?'#3fb950':'#8b949e',opacity:.8}}]
+  },true);
+  ch.off('click');ch.on('click',p=>{if(p.data&&p.data.gameId)openDetail(p.data.gameId)});
+}
+function renderYears(sel){
+  const ys={};
+  sel.forEach(g=>{const m=(g.release_date||'').match(/\d{4}/);if(m){const y=m[0];if(!ys[y])ys[y]={n:0,peak:0};ys[y].n++;ys[y].peak+=g.peak_in_game||0}});
+  const ks=Object.keys(ys).sort();
+  chartOf('c-years').setOption({
+    tooltip:{trigger:'axis'},
+    legend:{textStyle:{color:'#8b949e'},top:0},
+    grid:{left:50,right:50,top:34,bottom:30},
+    xAxis:{type:'category',data:ks,axisLabel:{color:'#8b949e'}},
+    yAxis:[{type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},{type:'value',axisLabel:{color:'#8b949e'},splitLine:{show:false}}],
+    series:[
+      {name:'游戏数',type:'bar',data:ks.map(k=>ys[k].n),itemStyle:{color:'#58a6ff'}},
+      {name:'峰值合计',type:'line',yAxisIndex:1,data:ks.map(k=>ys[k].peak),itemStyle:{color:'#d29922'}}
+    ]
+  },true);
+}
+function renderTags(sel){
+  const tc={};sel.forEach(g=>(g.tag_list||[]).forEach(t=>tc[t]=(tc[t]||0)+1));
+  const top=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  chartOf('c-tags').setOption({
+    tooltip:{formatter:p=>esc(p.name)+'：本页出现 '+p.value+' 次'},
+    grid:{left:110,right:56,top:10,bottom:30},
+    xAxis:{type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    yAxis:{type:'category',data:top.map(t=>t[0]).reverse(),axisLabel:{color:'#8b949e',fontSize:11}},
+    series:[{type:'bar',data:top.map(t=>t[1]).reverse(),itemStyle:{color:'#bc8cff'},label:{show:true,position:'right',color:'#8b949e',fontSize:10}}]
+  },true);
+}
+function renderDevs(sel){
+  const dc={};sel.forEach(g=>{if(g.developer&&g.peak_in_game)dc[g.developer]=(dc[g.developer]||0)+g.peak_in_game});
+  const top=Object.entries(dc).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  chartOf('c-devs').setOption({
+    tooltip:{formatter:p=>esc(p.name)+'：峰值合计 '+fmt(p.value)},
+    grid:{left:150,right:56,top:10,bottom:30},
+    xAxis:{type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    yAxis:{type:'category',data:top.map(t=>t[0]).reverse(),axisLabel:{color:'#8b949e',fontSize:11}},
+    series:[{type:'bar',data:top.map(t=>t[1]).reverse(),itemStyle:{color:'#d29922'},label:{show:true,position:'right',color:'#8b949e',fontSize:10,formatter:p=>fmt(p.value)}}]
+  },true);
+}
+
+function openDetail(gameId){
+  $('modal-mask').classList.add('show');
+  $('modal-body').innerHTML='<div class="loading">加载中…</div>';
+  const g=(PAGE_DATA&&PAGE_DATA.games.find(x=>String(x.game_id)===String(gameId)));
+  if(!g){$('modal-body').innerHTML='<div class="empty-tip">仅当前页样本可开详情（分页查询架构）</div>';return}
+  const kv=[];
+  if(g.rank!=null)kv.push(['官方榜名次','#'+g.rank+(g.rank_change!=null?((g.rank_change>=0?' ↑':' ↓')+Math.abs(g.rank_change)):'')]);
+  if(g.peak_in_game!=null)kv.push(['峰值在线',fmt(g.peak_in_game)]);
+  if(g.ccu!=null)kv.push(['当前在线(CCU)',fmt(g.ccu)]);
+  if(g.userscore!=null)kv.push(['好评率',g.userscore+'%']);
+  if(g.positive!=null)kv.push(['👍/👎',fmt(g.positive)+' / '+fmt(g.negative)]);
+  if(g.reviews_total!=null)kv.push(['累计评论',fmt(g.reviews_total)]);
+  if(g.owners)kv.push(['拥有量(SteamSpy)',esc(g.owners)]);
+  if(g.avg_playtime_2w!=null)kv.push(['两周均时',(g.avg_playtime_2w/60).toFixed(1)+'h']);
+  if(g.avg_playtime_forever!=null)kv.push(['历史均时',(g.avg_playtime_forever/60).toFixed(1)+'h']);
+  if(g.intensity!=null)kv.push(['游玩强度',g.intensity+(g.intensity>=1.5?' ⚡':'')]);
+  if(g.price_usd!=null)kv.push(['价格',g.price_usd===0?'免费':'$'+g.price_usd]);
+  if(g.release_date)kv.push(['发行日期',esc(g.release_date)]);
+  if(g.publisher)kv.push(['发行商',esc(g.publisher)]);
+  $('modal-body').innerHTML=
+    '<h3>'+esc(g.name)+(g.name_cn?' <span style="color:var(--gold);font-size:14px">'+esc(g.name_cn)+'</span>':'')+'</h3>'+
+    '<div class="sub">🎮 Steam ｜ '+((g.genres||[]).map(esc).join(' · ')||'—')+'</div>'+
+    (g.desc_cn?'<div style="font-size:13px;line-height:1.7;color:var(--muted);margin:8px 0">'+esc(g.desc_cn)+'</div>':'')+
+    '<a href="https://store.steampowered.com/app/'+esc(g.game_id)+'" target="_blank" style="font-size:12px">↗ Steam 商店页</a>'+
+    '<div class="kv">'+kv.map(([k,v])=>'<div class="item"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('')+'</div>'+
+    ((g.tag_list&&g.tag_list.length)?'<div style="margin:10px 0"><div style="font-size:11px;color:var(--dim);margin-bottom:6px">玩法标签 Top8</div>'+g.tag_list.map(t=>'<span class="pill">'+esc(t)+'</span>').join('')+'</div>':'')+
+    '<div id="why-box" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px"><div class="loading" style="padding:10px">原因分析加载中…</div></div>';
+  // 热门/冷门原因（证据链）
+  fetch('/game/api/steam-why?id='+encodeURIComponent(g.game_id))
+    .then(r=>r.json())
+    .then(j=>{
+      const box=$('why-box');
+      if(!j.ok){box.innerHTML='';return}
+      const dirIcon={'+':'<span style="color:var(--up)">▲ 利好</span>','−':'<span style="color:var(--down)">▼ 利空</span>','0':'<span style="color:var(--dim)">— 中性</span>'};
+      box.innerHTML='<div style="font-size:13px;font-weight:600;margin-bottom:8px">🔎 热度原因分析 <span style="font-size:10px;color:var(--dim);font-weight:400">每条结论附数值证据+来源，无臆测</span></div>'
+        +(j.factors&&j.factors.length?j.factors.map(f=>
+          '<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #21262d;font-size:12px;line-height:1.5">'
+          +'<div style="min-width:44px">'+(dirIcon[f.direction]||'')+'</div>'
+          +'<div><b>'+esc(f.factor)+'</b>：'+esc(f.evidence)
+          +'<div style="font-size:10px;color:var(--dim);margin-top:2px">来源：'+esc(f.source)+'</div></div></div>').join('')
+          :'<div class="empty-tip" style="padding:8px">暂无足够观测信号（每日 cron 持续积累中）</div>');
+    })
+    .catch(()=>{});
+}
+function closeModal(){$('modal-mask').classList.remove('show')}
+boot();
+</script>
+</body>
+</html>

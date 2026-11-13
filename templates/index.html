@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>游戏趋势雷达 · Game Trend Radar</title>
+<script src="/game/static/echarts.min.js"></script>
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2330;--border:#2d3644;
+  --text:#e6edf3;--muted:#8b949e;--dim:#6e7681;
+  --accent:#58a6ff;--hot:#f85149;--up:#3fb950;--warn:#d29922;--purple:#bc8cff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1280px;margin:0 auto;padding:0 20px 60px}
+header{padding:22px 0 14px;border-bottom:1px solid var(--border);margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px}
+header h1{font-size:22px;font-weight:700}
+header h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:12.5px}
+.snapshot-info{font-size:12.5px;color:var(--muted);text-align:right}
+.snapshot-info b{color:var(--text)}
+nav{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+nav button{background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px;transition:.15s}
+nav button:hover{color:var(--text);border-color:var(--accent)}
+nav button.active{background:#1f6feb33;border-color:var(--accent);color:var(--accent);font-weight:600}
+.view{display:none}
+.view.active{display:block}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h2 .src{font-size:11px;color:var(--dim);font-weight:400;border:1px solid var(--border);padding:1px 8px;border-radius:10px}
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.stat{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px}
+.stat .num{font-size:26px;font-weight:700}
+.stat .lbl{color:var(--muted);font-size:12px;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--muted);text-align:left;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--bg2)}
+td{padding:8px 10px;border-bottom:1px solid #21262d;vertical-align:middle}
+tr:hover td{background:#1c233055}
+.num-r{text-align:right}
+th.num-r{text-align:right}
+.name-cell{display:flex;align-items:center;gap:10px;min-width:180px}
+.name-cell img{width:34px;height:34px;border-radius:8px;object-fit:cover;background:var(--bg3)}
+.name-cell .gname{font-weight:600;cursor:pointer}
+.name-cell .gname:hover{color:var(--accent)}
+.name-cell .gsub{font-size:11px;color:var(--dim)}
+.gcn{color:var(--accent);font-weight:500}
+h3 .gcn{font-size:15px}
+.sim-item .gcn{font-size:11px;margin-right:2px}
+.plat{display:inline-block;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;margin-right:4px;border:1px solid}
+.p-steam{color:#66c0f4;border-color:#66c0f455;background:#66c0f40d}
+.p-roblox{color:#ff5c5c;border-color:#ff5c5c55;background:#ff5c5c0d}
+.p-epic{color:#e5e5e5;border-color:#ffffff44;background:#ffffff08}
+.p-tap{color:#12b981;border-color:#12b98155;background:#12b9810d}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;border:1px solid var(--border);color:var(--muted);margin:1px 2px}
+.pill.hot{border-color:#f8514966;color:var(--hot)}
+.pill.new{border-color:#3fb95066;color:var(--up);background:#3fb95011}
+.chg-up{color:var(--up);font-weight:600}
+.chg-down{color:var(--hot);font-weight:600}
+.badge-fire{background:linear-gradient(90deg,#f8514955,#d2992255);border:1px solid #f8514966;color:#ffb3ad;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-up{background:#3fb95022;border:1px solid #3fb95055;color:#7ee787;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.tagbar{margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.tagbar:hover .tname{color:var(--accent)}
+.tname{min-width:150px;font-weight:600;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbar-wrap{flex:1;background:var(--bg3);border-radius:5px;height:22px;position:relative;overflow:hidden}
+.tbar{height:100%;border-radius:5px;background:linear-gradient(90deg,#1f6feb,#58a6ff);transition:width .4s}
+.tval{min-width:80px;font-size:12px;color:var(--muted)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}}
+.modal-mask{display:none;position:fixed;inset:0;background:#000a;z-index:50;overflow-y:auto;padding:40px 16px}
+.modal-mask.show{display:block}
+.modal{max-width:860px;margin:0 auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;position:relative}
+.modal .close{position:absolute;right:16px;top:12px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer}
+.modal h3{font-size:19px;margin-bottom:4px;padding-right:40px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:14px 0}
+.kv .item{background:var(--bg3);border-radius:8px;padding:8px 12px}
+.kv .item .k{font-size:11px;color:var(--muted)}
+.kv .item .v{font-weight:600;font-size:14px}
+.filter-row{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.filter-row .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.filter-row .seg button{background:transparent;border:none;color:var(--muted);padding:6px 16px;cursor:pointer;font-size:13px}
+.filter-row .seg button.active{background:#1f6feb33;color:var(--accent);font-weight:600}
+.legend-note{font-size:12px;color:var(--dim);margin-top:8px}
+.legend-note b{color:var(--muted)}
+.empty-tip{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
+.sim-item{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 10px;margin:3px;cursor:pointer;font-size:12.5px}
+.sim-item:hover{border-color:var(--accent);color:var(--accent)}
+.sim-item .j{color:var(--dim);font-size:11px}
+#chart-tagmain{height:520px}
+#chart-gamehist{height:260px}
+#chart-cooc{height:360px}
+.fire-row td{background:#f8514908}
+.pairs-list .pair{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer}
+.pairs-list .pair:hover{background:var(--bg3)}
+.pairs-list .pair .w{margin-left:auto;color:var(--dim);font-size:11px}
+.loading{color:var(--muted);text-align:center;padding:40px 0}
+.src-table{font-size:12px;color:var(--muted)}
+.src-table td{border-bottom:1px solid #21262d88}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>🎮 游戏趋势雷达 <span>Game Trend Radar</span></h1>
+    <div class="sub">Steam · Roblox · Epic · TapTap 每日观测 ｜ 全部数据来自官方 API 真实观测值，不估算 ｜ <a href="/game/steam" style="color:var(--accent)">🔬 Steam 深研页 →</a></div>
+  </div>
+  <div class="snapshot-info" id="snap-info">加载中…</div>
+</header>
+<nav>
+  <button class="active" data-view="overview">📊 总览</button>
+  <button data-view="hot">🔥 近期爆火</button>
+  <button data-view="popular">⭐ 饱受欢迎</button>
+  <button data-view="tags">🧩 玩法关联</button>
+  <button data-view="epic">🎁 Epic 免费</button>
+</nav>
+
+<!-- ================= 总览 ================= -->
+<div class="view active" id="view-overview">
+  <div class="grid-stats" id="ov-stats"></div>
+  <div class="card">
+    <h2>数据覆盖与快照历史 <span class="src">来源：本站采集记录</span></h2>
+    <div id="chart-snapshots" style="height:240px"></div>
+    <div class="legend-note">每日快照各平台收录游戏数。数据积累后：爆火识别启用日环比/周环比信号。</div>
+  </div>
+  <div class="card">
+    <h2>数据来源溯源</h2>
+    <table class="src-table">
+      <tr><th>平台</th><th>榜单/指标</th><th>一手来源</th><th>更新频率</th></tr>
+      <tr><td>Steam</td><td>最热榜 Top100（rank / 上周rank / 峰值在线）</td><td>Valve 官方 ISteamChartsService</td><td>每日</td></tr>
+      <tr><td>Steam</td><td>玩法标签 / 拥有量区间 / 两周游玩时长</td><td>SteamSpy API</td><td>每日</td></tr>
+      <tr><td>Steam</td><td>发行日期 / 定价 / 累计评论数</td><td>Valve 官方 appdetails</td><td>每日（榜首30+新游戏）</td></tr>
+      <tr><td>Roblox</td><td>Trending / Up-and-Coming / Playing Now / Revisited 四榜 + 实时人数</td><td>Roblox 官方 explore-api</td><td>每日</td></tr>
+      <tr><td>Roblox</td><td>访问量 / 收藏数 / 玩法分类 genreL1</td><td>Roblox 官方 games-api</td><td>每日</td></tr>
+      <tr><td>TapTap</td><td>热门榜（评分 / 评分人数 / 类别 / 图标）</td><td>TapTap 国际版官方榜（webapiv2 + SSR ld+json）*</td><td>每日</td></tr>
+      <tr><td>Epic</td><td>免费领取 / 即将免费</td><td>Epic 官方 freeGamesPromotions</td><td>每日</td></tr>
+      <tr><td>全平台</td><td>中文双名 / 中文简介</td><td>Steam 官方 l=schinese ｜ Epic 官方 locale=zh-CN</td><td>每日（仅存真实官方中文，无则留空）</td></tr>
+    </table>
+    <div class="legend-note" style="margin-top:8px">* TapTap 中文站（taptap.cn）拒绝数据中心 IP 访问，采用其国际版官方榜（内容为官方英文原名与评分，无官方中文名时按规则只显示原名）。</div>
+  </div>
+</div>
+
+<!-- ================= 爆火 ================= -->
+<div class="view" id="view-hot">
+  <div class="card">
+    <h2>🔥 Steam 爆火信号 <span class="src">Valve官方榜 rank vs last_week_rank + SteamSpy 两周强度</span></h2>
+    <div class="legend-note" style="margin-bottom:10px">
+      <b>爆火判定（全部真实观测，非估算）：</b>
+      🆕 新上榜（上周未进榜） ｜ ↑ 周排名跃升≥3 ｜ 强度≥1.5 = 近两周平均游玩时长 ÷ 历史平均（>1 即近期升温） ｜ 评论日增 = 累计评论数快照差
+    </div>
+    <div id="hot-steam"><div class="loading">加载中…</div></div>
+  </div>
+  <div class="card">
+    <h2>🔥 Roblox 爆火信号 <span class="src">Roblox官方 Up-and-Coming / Top Trending 榜</span></h2>
+    <div class="legend-note" style="margin-bottom:10px">Up-and-Coming = Roblox 官方成长性榜单（算法由平台提供）；玩家数日环比需 ≥2 天快照。</div>
+    <div id="hot-roblox"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+
+<!-- ================= 热门 ================= -->
+<div class="view" id="view-popular">
+  <div class="filter-row">
+    <div class="seg" id="pop-platform">
+      <button class="active" data-p="steam">Steam Top50</button>
+      <button data-p="roblox">Roblox Top50</button>
+      <button data-p="taptap">TapTap 榜单</button>
+    </div>
+    <span style="color:var(--dim);font-size:12px" id="pop-src-note"></span>
+  </div>
+  <div class="card" id="pop-card">
+    <h2 id="pop-title">⭐ Steam 热门 Top50 <span class="src">Valve官方榜峰值在线 + SteamSpy</span></h2>
+    <div id="pop-body"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+
+<!-- ================= 玩法关联 ================= -->
+<div class="view" id="view-tags">
+  <div class="filter-row">
+    <div class="seg" id="tag-platform">
+      <button class="active" data-p="steam">Steam 标签</button>
+      <button data-p="roblox">Roblox 分类</button>
+    </div>
+    <span style="color:var(--dim);font-size:12px" id="tag-src-note"></span>
+  </div>
+  <div class="card">
+    <h2>玩法热度榜 <span class="src" id="tag-chart-src">SteamSpy 标签 × 官方在线人数加权</span></h2>
+    <div class="legend-note" style="margin-bottom:8px">权重 = 携带该标签游戏的当日峰值在线之和（点击条目查看玩法关联）。Steam 标签为玩家社区投票（SteamSpy 汇总），票数&lt;20 的噪声标签已过滤。</div>
+    <div id="chart-tagmain"></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <h2>🔗 玩法关联（标签共现）<span class="src" id="pair-title">选择左侧标签</span></h2>
+      <div id="cooc-area"><div class="empty-tip">点击上方玩法条目 → 展示常与它同现的玩法（共现权重=同游戏在线人数）</div></div>
+    </div>
+    <div class="card">
+      <h2>📈 玩法动量 <span class="src">快照间权重变化</span></h2>
+      <div id="tag-trend"><div class="empty-tip">需 ≥2 天快照积累（明日自动出现）</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Epic ================= -->
+<div class="view" id="view-epic">
+  <div class="card">
+    <h2>🎁 Epic 免费游戏 <span class="src">Epic官方 freeGamesPromotions</span></h2>
+    <div id="epic-list"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+</div>
+
+<!-- 游戏详情弹窗 -->
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <button class="close" onclick="closeModal()">×</button>
+    <div id="modal-body"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+
+<script>
+/* ============ 基础 ============ */
+const $=id=>document.getElementById(id);
+const fmt=n=>n==null?'—':(n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n);
+const fmt2=n=>n==null?'—':(n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':n);
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* 双名展示：仅当存在官方真实中文名（name_cn 非空）时才显示，否则只显示原名 */
+function cnSpan(cn){return cn?` <span class="gcn">${esc(cn)}</span>`:''}
+function nameHtml(r){return esc(r.name)+cnSpan(r.name_cn)}
+/* 平台徽标：所有游戏显示适配平台 */
+const PLAT_META={
+  steam:{label:'Steam',cls:'p-steam',icon:'🎮'},
+  roblox:{label:'Roblox',cls:'p-roblox',icon:'🧱'},
+  epic:{label:'Epic',cls:'p-epic',icon:'🏪'},
+  taptap:{label:'TapTap',cls:'p-tap',icon:'📱'},
+};
+function platBadge(p){const m=PLAT_META[p]||{label:p,cls:'',icon:'🎮'};return `<span class="plat ${m.cls}" title="${m.label}">${m.icon} ${m.label}</span>`}
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  $('view-'+b.dataset.view).classList.add('active');
+  window.dispatchEvent(new Event('resize'));
+  lazyLoad(b.dataset.view);
+});
+
+const CHARTS={};
+function chartOf(id){const el=$(id);if(!el)return null;if(!CHARTS[id])CHARTS[id]=echarts.init(el);return CHARTS[id];}
+window.addEventListener('resize',()=>Object.values(CHARTS).forEach(c=>{try{if(c.getDom().offsetWidth>0)c.resize()}catch(e){}}));
+
+let OVERVIEW=null, TAGDATA={steam:null,roblox:null}, loaded={};
+
+function lazyLoad(v){
+  if(v==='hot'&&!loaded.hot){loaded.hot=1;loadHot();}
+  if(v==='popular'&&!loaded.popular){loaded.popular=1;loadPopular();}
+  if(v==='tags'&&!loaded.tags){loaded.tags=1;loadTags('steam');}
+  if(v==='epic'&&!loaded.epic){loaded.epic=1;loadEpic();}
+}
+
+/* ============ 总览 ============ */
+async function loadOverview(){
+  try{
+    const j=await (await fetch('/game/api/overview')).json();
+    if(!j.ok){$('snap-info').textContent=j.msg;return}
+    OVERVIEW=j;
+    $('snap-info').innerHTML=`最新快照 <b>${j.latest_date}</b> ｜ 前次 ${j.prev_date||'—'}`;
+    const c=j.counts;
+    $('ov-stats').innerHTML=`
+      <div class="stat"><div class="num">${c.steam||0}</div><div class="lbl">Steam 榜单游戏（官方Top100 + SteamSpy热门）</div></div>
+      <div class="stat"><div class="num">${c.roblox||0}</div><div class="lbl">Roblox 四榜游戏（官方）</div></div>
+      <div class="stat"><div class="num">${c.taptap||0}</div><div class="lbl">TapTap 热门榜游戏（国际版官方）</div></div>
+      <div class="stat"><div class="num">${c.epic||0}</div><div class="lbl">Epic 免费游戏追踪</div></div>
+      <div class="stat"><div class="num">${j.snapshots.length}</div><div class="lbl">累计快照天数</div></div>`;
+    const ch=chartOf('chart-snapshots');
+    if(ch){
+      ch.setOption({
+        tooltip:{trigger:'axis'},
+        legend:{textStyle:{color:'#8b949e'},top:0},
+        grid:{left:50,right:20,top:30,bottom:30},
+        xAxis:{type:'category',data:j.snapshots.map(s=>s.date),axisLabel:{color:'#8b949e'}},
+        yAxis:{type:'value',axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+        series:[
+          {name:'Steam',type:'line',data:j.snapshots.map(s=>s.steam),smooth:true,itemStyle:{color:'#58a6ff'},areaStyle:{opacity:.15}},
+          {name:'Roblox',type:'line',data:j.snapshots.map(s=>s.roblox),smooth:true,itemStyle:{color:'#bc8cff'},areaStyle:{opacity:.15}},
+          {name:'TapTap',type:'line',data:j.snapshots.map(s=>s.taptap||0),smooth:true,itemStyle:{color:'#12b981'}},
+          {name:'Epic',type:'line',data:j.snapshots.map(s=>s.epic),smooth:true,itemStyle:{color:'#d29922'}}
+        ]
+      },true);
+    }
+  }catch(e){$('snap-info').textContent='加载失败'}
+}
+
+/* ============ 表格渲染 ============ */
+function steamHotTable(rows){
+  if(!rows.length)return '<div class="empty-tip">今日无爆火信号</div>';
+  const tr=rows.map(r=>{
+    const sig=[];
+    if(r.new_entry)sig.push('<span class="pill new">🆕 新上榜</span>');
+    if(r.rank_jump>0)sig.push(`<span class="badge-up">↑${r.rank_jump}位</span>`);
+    if(r.intensity_2w_vs_forever!=null&&r.intensity_2w_vs_forever>=1.3)sig.push(`<span class="pill hot">强度${r.intensity_2w_vs_forever}×</span>`);
+    if(r.reviews_growth_1d!=null&&r.reviews_growth_1d>=20)sig.push(`<span class="pill hot">评论+${r.reviews_growth_1d}/日</span>`);
+    const tags=(r.tags?Object.entries(r.tags).sort((a,b)=>b[1]-a[1]).slice(0,4).map(t=>`<span class="pill">${esc(t[0])}</span>`):'').join('');
+    return `<tr class="${r.new_entry||r.rank_jump>=10?'fire-row':''}">
+      <td>${r.rank!=null?'#'+r.rank:'—'}</td>
+      <td><div class="name-cell">
+        <div><div class="gname" onclick="openGame('steam','${r.game_id}')">${platBadge('steam')}${nameHtml(r)}</div>
+        <div class="gsub">${esc(r.developer||'')} ${r.release_date?esc(r.release_date):''}</div></div></div></td>
+      <td>${sig.join(' ')||'—'}</td>
+      <td class="num-r">${fmt(r.peak_in_game)}</td>
+      <td class="num-r">${r.intensity_2w_vs_forever!=null?r.intensity_2w_vs_forever+'×':'—'}</td>
+      <td class="num-r">${r.reviews_growth_1d!=null?'+'+fmt(r.reviews_growth_1d):'—'}</td>
+      <td>${tags}</td>
+      <td class="num-r">${r.price_usd!=null?(r.price_usd===0?'免费':'$'+r.price_usd):''}</td>
+    </tr>`;}).join('');
+  return `<table><tr><th>榜</th><th>游戏</th><th>爆火信号</th><th class="num-r">峰值在线</th><th class="num-r">两周强度</th><th class="num-r">评论日增</th><th>玩法标签</th><th class="num-r">价格</th></tr>${tr}</table>`;
+}
+
+function robloxCards(rows,hot){
+  if(!rows.length)return '<div class="empty-tip">无数据</div>';
+  const tr=rows.map(r=>{
+    const sorts=Object.entries(r.sort_ranks||{}).map(([k,v])=>{
+      const m={upcoming:'🚀 Up-and-Coming',trending:'🔥 Trending',playing:'▶ 在玩',revisited:'🔁 回流'}[k];
+      return m?`<span class="pill ${k==='upcoming'?'new':k==='trending'?'hot':''}">${m} #${v}</span>`:'';}).join('');
+    const chg=r.players_chg_1d_pct!=null?`<span class="${r.players_chg_1d_pct>=0?'chg-up':'chg-down'}">${r.players_chg_1d_pct>=0?'↑':'↓'}${Math.abs(r.players_chg_1d_pct)}%</span>`:'';
+    return `<tr>
+      <td><div class="name-cell">${r.icon?`<img src="${esc(r.icon)}" loading="lazy" referrerpolicy="no-referrer">`:''}
+        <div><div class="gname" onclick="openGame('roblox','${r.game_id}')">${platBadge('roblox')}${nameHtml(r)}</div>
+        <div class="gsub">${esc(r.developer||'')}</div></div></div></td>
+      <td>${sorts||'—'}</td>
+      <td class="num-r">${fmt(r.players)} ${chg}</td>
+      <td class="num-r">${fmt2(r.visits)}</td>
+      <td class="num-r">${r.up_votes!=null?fmt(r.up_votes):'—'}</td>
+      <td>${(r.genres||[]).map(g=>`<span class="pill">${esc(g)}</span>`).join('')}</td>
+    </tr>`;}).join('');
+  return `<table><tr><th>游戏</th><th>官方榜单</th><th class="num-r">实时人数</th><th class="num-r">累计访问</th><th class="num-r">👍</th><th>玩法分类</th></tr>${tr}</table>`;
+}
+
+async function loadHot(){
+  try{
+    const j=await (await fetch('/game/api/hot')).json();
+    $('hot-steam').innerHTML=j.ok?steamHotTable(j.steam):j.msg;
+    $('hot-roblox').innerHTML=j.ok?robloxCards(j.roblox):j.msg;
+  }catch(e){$('hot-steam').innerHTML='<div class="empty-tip">加载失败</div>'}
+}
+
+let POPDATA=null,POPPLAT='steam';
+document.querySelectorAll('#pop-platform button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#pop-platform button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');POPPLAT=b.dataset.p;renderPop();
+});
+
+async function loadPopular(){
+  try{
+    const j=await (await fetch('/game/api/popular')).json();
+    if(!j.ok){$('pop-body').innerHTML=j.msg;return}
+    POPDATA=j;renderPop();
+  }catch(e){$('pop-body').innerHTML='<div class="empty-tip">加载失败</div>'}
+}
+
+function renderPop(){
+  const j=POPDATA;if(!j)return;
+  const titles={
+    steam:['⭐ Steam 热门 Top50','Valve官方榜峰值在线 + SteamSpy'],
+    roblox:['⭐ Roblox 热门 Top50','Roblox官方实时人数'],
+    taptap:['⭐ TapTap 热门榜','TapTap国际版官方榜（taptap.io，评分/评分人数为官方观测）'],
+  };
+  const [t,src]=titles[POPPLAT];
+  $('pop-title').innerHTML=`${t} <span class="src">${src}</span>`;
+  $('pop-src-note').textContent=`快照 ${j.date||''}`;
+  if(POPPLAT==='steam'){
+    const tr=j.steam.map(r=>{
+      const chg=r.ccu_chg_1d_pct!=null?`<span class="${r.ccu_chg_1d_pct>=0?'chg-up':'chg-down'}">${r.ccu_chg_1d_pct>=0?'↑':'↓'}${Math.abs(r.ccu_chg_1d_pct)}%</span>`:'';
+      return `<tr>
+        <td>${r.rank!=null?'#'+r.rank:'—'}</td>
+        <td>${platBadge('steam')}<div class="gname" onclick="openGame('steam','${r.game_id}')">${nameHtml(r)}</div><div class="gsub">${esc(r.developer||'')}</div></td>
+        <td class="num-r">${fmt(r.peak_in_game||r.ccu)} ${chg}</td>
+        <td class="num-r">${r.userscore!=null?r.userscore+'%':'—'}</td>
+        <td class="num-r">${fmt(r.reviews_total)}</td>
+        <td class="num-r">${r.avg_playtime_2w!=null?(r.avg_playtime_2w/60).toFixed(1)+'h':'—'}</td>
+        <td>${(r.genres||[]).slice(0,2).map(g=>`<span class="pill">${esc(g)}</span>`).join('')}</td>
+        <td>${esc(r.owners||'')}</td>
+        <td class="num-r">${r.price_usd!=null?(r.price_usd===0?'免费':'$'+r.price_usd):''}</td>
+      </tr>`;}).join('');
+    $('pop-body').innerHTML=`<table><tr><th>榜</th><th>游戏</th><th class="num-r">峰值在线</th><th class="num-r">好评率</th><th class="num-r">评论数</th><th class="num-r">两周时长</th><th>类型</th><th>拥有量</th><th class="num-r">价格</th></tr>${tr}</table>`;
+  }else if(POPPLAT==='roblox'){
+    const tr2=j.roblox.map((r,i)=>{
+      const chg=r.players_chg_1d_pct!=null?`<span class="${r.players_chg_1d_pct>=0?'chg-up':'chg-down'}">${r.players_chg_1d_pct>=0?'↑':'↓'}${Math.abs(r.players_chg_1d_pct)}%</span>`:'';
+      return `<tr>
+        <td>#${i+1}</td>
+        <td><div class="name-cell">${r.icon?`<img src="${esc(r.icon)}" loading="lazy" referrerpolicy="no-referrer">`:''}<div>${platBadge('roblox')}<div class="gname" onclick="openGame('roblox','${r.game_id}')">${nameHtml(r)}</div><div class="gsub">${esc(r.developer||'')}</div></div></div></td>
+        <td class="num-r">${fmt(r.players)} ${chg}</td>
+        <td class="num-r">${fmt2(r.visits)}</td>
+        <td class="num-r">${fmt(r.favorites)}</td>
+        <td class="num-r">${r.up_votes!=null?fmt(r.up_votes):'—'}</td>
+        <td>${(r.genres||[]).map(g=>`<span class="pill">${esc(g)}</span>`).join('')}</td>
+      </tr>`;}).join('');
+    $('pop-body').innerHTML=`<table><tr><th>#</th><th>游戏</th><th class="num-r">实时人数</th><th class="num-r">累计访问</th><th class="num-r">收藏</th><th class="num-r">👍</th><th>玩法分类</th></tr>${tr2}</table>`;
+  }else{
+    const tt=j.taptap||[];
+    if(!tt.length){$('pop-body').innerHTML='<div class="empty-tip">暂无 TapTap 数据</div>';return}
+    const tr3=tt.map(r=>`<tr>
+        <td>${r.rank!=null?'#'+r.rank:'—'}</td>
+        <td><div class="name-cell">${r.icon?`<img src="${esc(r.icon)}" loading="lazy" referrerpolicy="no-referrer">`:''}<div>${platBadge('taptap')}<div class="gname" onclick="openGame('taptap','${r.game_id}')">${nameHtml(r)}</div><div class="gsub">${esc(r.developer||'')}</div></div></div></td>
+        <td class="num-r">${r.score!=null?r.score+'/10':'—'}</td>
+        <td class="num-r">${r.rating_count!=null?fmt(r.rating_count):'—'}</td>
+        <td>${(r.genres||[]).slice(0,2).map(g=>`<span class="pill">${esc(g)}</span>`).join('')||'—'}</td>
+        <td class="num-r">${r.release_date||'—'}</td>
+        <td>${r.os?esc(r.os):'—'}</td>
+        <td>${r.tt_url?`<a href="${esc(r.tt_url)}" target="_blank">TapTap ↗</a>`:'—'}</td>
+      </tr>`).join('');
+    $('pop-body').innerHTML=`<table><tr><th>#</th><th>游戏</th><th class="num-r">评分</th><th class="num-r">评分人数</th><th>类别</th><th class="num-r">发行</th><th>平台</th><th>链接</th></tr>${tr3}</table>`;
+  }
+}
+
+/* ============ 玩法关联 ============ */
+document.querySelectorAll('#tag-platform button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tag-platform button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  loadTags(b.dataset.p);
+});
+
+async function loadTags(platform){
+  try{
+    const j=await (await fetch('/game/api/tags?platform='+platform)).json();
+    if(!j.ok){$('chart-tagmain').innerHTML='';return}
+    TAGDATA[platform]=j;
+    $('tag-src-note').textContent=`快照 ${j.date} ｜ 来源：${j.source}`;
+    $('tag-chart-src').textContent=j.source;
+    renderTagMain(platform);
+    renderTagTrend(j);
+  }catch(e){console.error(e)}
+}
+
+function renderTagMain(platform){
+  const j=TAGDATA[platform];if(!j)return;
+  const ch=chartOf('chart-tagmain');
+  const tags=j.tags.slice(0,30);
+  ch.setOption({
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},
+      formatter:p=>{const t=j.tags[p[0].dataIndex];
+        const games=t.top_games.map(g=>esc(g.name)).join('、');
+        return `<b>${esc(t.tag)}</b> ｜ ${t.games}款游戏<br><span style="color:#8b949e">代表：${games}</span>`;}},
+    grid:{left:160,right:60,top:10,bottom:20},
+    xAxis:{type:'value',axisLabel:{color:'#8b949e',formatter:v=>fmt(v)},splitLine:{lineStyle:{color:'#21262d'}}},
+    yAxis:{type:'category',data:tags.map(t=>t.tag).reverse(),axisLabel:{color:'#e6edf3',fontSize:12}},
+    series:[{type:'bar',data:tags.map(t=>platform==='steam'?t.total_ccu_weight:t.total_players).reverse(),
+      itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#1f6feb'},{offset:1,color:'#58a6ff'}]),borderRadius:[0,4,4,0]},
+      label:{show:true,position:'right',color:'#8b949e',fontSize:11,formatter:p=>platform==='steam'?fmt(p.value):fmt(p.value)},
+      cursor:'pointer'}].map(s=>({...s,name:'weight'}))
+  },true);
+  ch.off('click');ch.on('click',p=>selectTag(platform,p.name));
+}
+
+function selectTag(platform,tag){
+  const j=TAGDATA[platform];if(!j)return;
+  $('pair-title').textContent=`${tag} 的关联玩法`;
+  if(platform==='roblox'){
+    const t=j.tags.find(x=>x.tag===tag);
+    $('cooc-area').innerHTML=`<div style="margin-bottom:8px;color:var(--muted);font-size:12px">Roblox 官方分类无共现数据，展示该分类代表游戏：</div>
+      ${t?t.top_games.map(g=>`<div class="pair" onclick="openGame('roblox','${g.game_id}')"><span>${esc(g.name)}</span><span class="w">${fmt(g.players)}人在玩</span></div>`).join(''):''}`;
+    return;
+  }
+  const rel=j.pairs.filter(p=>p.a===tag||p.b===tag)
+    .map(p=>({other:p.a===tag?p.b:p.a,w:p.weight}))
+    .sort((a,b)=>b.w-a.w).slice(0,15);
+  const t=j.tags.find(x=>x.tag===tag);
+  const topHtml=t?`<div style="margin:8px 0;color:var(--muted);font-size:12px">承载游戏（在线加权 Top6）：${t.top_games.map(g=>`<span class="pill" style="cursor:pointer" onclick="openGame('steam','${g.game_id}')">${esc(g.name)}${cnSpan(g.name_cn)}</span>`).join('')}</div>`:'';
+  if(!rel.length){$('cooc-area').innerHTML=topHtml+'<div class="empty-tip">该标签无强共现对</div>';return}
+  // 先建 DOM；旧实例若存在一律 dispose 重建（innerHTML 替换后旧实例 DOM 已脱离）
+  $('cooc-area').innerHTML=topHtml+'<div id="chart-cooc"></div>';
+  const el=$('chart-cooc');
+  if(CHARTS['chart-cooc']){try{CHARTS['chart-cooc'].dispose()}catch(e){}}
+  const nc=echarts.init(el);
+  CHARTS['chart-cooc']=nc;
+  if(nc.getWidth()!==el.offsetWidth)nc.resize();
+  nc.setOption({
+    title:{text:tag+' × 常同现玩法',textStyle:{color:'#e6edf3',fontSize:14},left:0,top:0},
+    tooltip:{formatter:p=>`<b>${esc(p.name)}</b> 共现权重 ${fmt(p.value)}`},
+    grid:{left:10,right:70,top:34,bottom:10,containLabel:true},
+    xAxis:{type:'value',show:false},
+    yAxis:{type:'category',data:rel.map(r=>r.other).reverse(),axisLabel:{color:'#e6edf3',fontSize:12}},
+    series:[{type:'bar',data:rel.map(r=>r.w).reverse(),
+      itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#8b5cf6'},{offset:1,color:'#bc8cff'}]),borderRadius:[0,4,4,0]},
+      label:{show:true,position:'right',color:'#8b949e',fontSize:11,formatter:p=>fmt(p.value)}}]
+  },true);
+  nc.off('click');nc.on('click',p=>selectTag('steam',p.name));
+}
+
+function renderTagTrend(j){
+  if(!j.trend||!j.trend.length){
+    $('tag-trend').innerHTML='<div class="empty-tip">需 ≥2 天快照积累（明日自动出现日环比）</div>';return}
+  const rows=j.trend.slice(0,20).map(t=>`<div class="pair"><span>${esc(t.tag)}</span>
+    <span class="w">${t.chg_pct>=0?'<span class="chg-up">↑'+t.chg_pct+'%</span>':'<span class="chg-down">↓'+Math.abs(t.chg_pct)+'%</span>'} ${fmt(t.now)}</span></div>`).join('');
+  $('tag-trend').innerHTML=rows;
+}
+
+/* ============ Epic ============ */
+async function loadEpic(){
+  try{
+    const j=await (await fetch('/game/api/epic')).json();
+    if(!j.ok){$('epic-list').innerHTML=j.msg;return}
+    const rows=j.games.map(g=>`<tr>
+      <td><div class="name-cell">${g.icon?`<img src="${esc(g.icon)}" loading="lazy" referrerpolicy="no-referrer">`:''}
+        <div>${platBadge('epic')}<div class="gname" onclick="openGame('epic','${g.game_id}')">${nameHtml(g)}</div><div class="gsub">${esc(g.developer||'')}</div></div></div></td>
+      <td>${g.free_now?'<span class="pill new">🎁 现在免费</span>':g.free_upcoming?'<span class="pill hot">⏰ 即将免费</span>':'<span class="pill">促销中</span>'}</td>
+      <td class="num-r">${g.original_price_usd!=null?'$'+g.original_price_usd:'—'}</td>
+      <td>${g.slug?`<a href="https://store.epicgames.com/p/${esc(g.slug)}" target="_blank">商店页 ↗</a>`:'—'}</td>
+    </tr>`).join('');
+    $('epic-list').innerHTML=`<table><tr><th>游戏</th><th>状态</th><th class="num-r">原价</th><th>链接</th></tr>${rows}</table>`;
+  }catch(e){$('epic-list').innerHTML='<div class="empty-tip">加载失败</div>'}
+}
+
+/* ============ 详情弹窗 ============ */
+function closeModal(){$('modal').classList.remove('show');}
+$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};
+
+async function openGame(platform,gid){
+  $('modal').classList.add('show');
+  $('modal-body').innerHTML='<div class="loading">加载中…</div>';
+  try{
+    const j=await (await fetch(`/game/api/game/${platform}/${gid}`)).json();
+    if(!j.ok){$('modal-body').innerHTML='<div class="empty-tip">未收录</div>';return}
+    const g=j.game,meta=g.meta||{};
+    const kv=[];
+    if(platform==='steam'){
+      kv.push(['峰值在线',fmt(j.history.length?j.history[j.history.length-1].peak_in_game:null)+' 人']);
+      if(meta.userscore!=null)kv.push(['好评率',meta.userscore+'%']);
+      if(meta.positive!=null)kv.push(['👍/👎',fmt(meta.positive)+' / '+fmt(meta.negative)]);
+      kv.push(['累计评论',fmt(j.history.length?j.history[j.history.length-1].reviews_total:null)]);
+      if(meta.price_usd!=null)kv.push(['价格',meta.price_usd===0?'免费':'$'+meta.price_usd]);
+      if(j.history.length){const h=j.history[j.history.length-1];
+        if(h.avg_playtime_2w!=null)kv.push(['两周时长',(h.avg_playtime_2w/60).toFixed(1)+'h']);
+        if(h.avg_playtime_forever!=null)kv.push(['历史时长',(h.avg_playtime_forever/60).toFixed(1)+'h']);}
+    }else if(platform==='taptap'){
+      if(meta.score!=null)kv.push(['TapTap评分',meta.score+' / 10']);
+      if(meta.rating_count!=null)kv.push(['评分人数',fmt(meta.rating_count)]);
+      if(meta.os)kv.push(['适配平台',meta.os]);
+    }else if(platform==='epic'){
+      const h=j.history.length?j.history[j.history.length-1]:{};
+      if(h.free_now!=null||h.promo)kv.push(['免费状态',h.free_now?'🎁 现在免费':(h.promo?'⏰ 即将免费':'促销中')]);
+    }else{
+      const h=j.history.length?j.history[j.history.length-1]:{};
+      kv.push(['实时人数',fmt(h.players)+' 人']);
+      kv.push(['累计访问',fmt2(h.visits)]);
+      kv.push(['收藏',fmt(h.favorites)]);
+      if(meta.upVotes!=null)kv.push(['👍',fmt(meta.upVotes)]);
+      if(meta.maxPlayers)kv.push(['单服上限',meta.maxPlayers+' 人']);
+      if(h.sorts)kv.push(['官方榜单',Object.entries(h.sorts).map(([k,v])=>({upcoming:'Up&Coming',trending:'Trending',playing:'Playing',revisited:'Revisited'}[k]||k)+'#'+v).join(' · ')]);
+    }
+    kv.push(['发行',g.release_date||'—']);
+    kv.push(['开发者',g.developer||'—']);
+    const tagsHtml=platform==='steam'&&g.tags?
+      Object.entries(g.tags).sort((a,b)=>b[1]-a[1]).slice(0,18).map(t=>`<span class="pill">${esc(t[0])} <span style="color:var(--dim)">${t[1]}</span></span>`).join(''):'';
+    const sims=(j.similar||[]).map(s=>`<span class="sim-item" onclick="openGame('steam','${s.game_id}')">${esc(s.name)}${cnSpan(s.name_cn)}<span class="j">${(s.jaccard*100).toFixed(0)}%</span></span>`).join('');
+    const link=g.link||(platform==='steam'?`https://store.steampowered.com/app/${gid}`:'#');
+    const platName={steam:'Steam',roblox:'Roblox',epic:'Epic',taptap:'TapTap'}[platform]||platform;
+    const descHtml=g.desc_cn?`<div style="margin:10px 0"><div class="k" style="color:var(--muted);font-size:12px;margin-bottom:6px">游戏介绍（官方中文）</div><div style="font-size:13px;line-height:1.7;color:var(--muted)">${esc(g.desc_cn)}</div></div>`
+      :(platform==='taptap'&&meta.desc_en?`<div style="margin:10px 0"><div class="k" style="color:var(--muted);font-size:12px;margin-bottom:6px">游戏介绍（TapTap 国际版，官方无中文）</div><div style="font-size:13px;line-height:1.7;color:var(--muted)">${esc(meta.desc_en)}</div></div>`:'');
+    $('modal-body').innerHTML=`
+      <h3>${platBadge(platform)}${esc(g.name)}${cnSpan(g.name_cn)} <a href="${esc(link)}" target="_blank" style="font-size:13px">↗ ${platName} 商店页</a></h3>
+      <div class="sub">${platName} ｜ ${(g.genres||[]).map(esc).join(' · ')}</div>
+      ${descHtml}
+      <div class="kv">${kv.map(([k,v])=>`<div class="item"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
+      ${tagsHtml?`<div style="margin:10px 0"><div class="k" style="color:var(--muted);font-size:12px;margin-bottom:6px">玩法标签（SteamSpy 玩家投票）</div>${tagsHtml}</div>`:''}
+      ${sims?`<div style="margin:10px 0"><div class="k" style="color:var(--muted);font-size:12px;margin-bottom:6px">玩法相似游戏（标签 Jaccard）</div>${sims}</div>`:''}
+      <div class="k" style="color:var(--muted);font-size:12px;margin:12px 0 4px">本站观测历史（${j.history.length} 天）</div>
+      <div id="chart-gamehist"></div>`;
+    const hasCurve=(platform==='steam'&&j.history.some(h=>h.peak_in_game!=null||h.reviews_total!=null))
+      ||((platform==='roblox')&&j.history.some(h=>h.players!=null));
+    if(j.history.length>=2&&hasCurve){
+      const hc=echarts.init($('chart-gamehist'));CHARTS['chart-gamehist']=hc;
+      const metric=platform==='steam'?'peak_in_game':'players';
+      const hasHist=j.history.some(h=>h[metric]!=null);
+      const series=hasHist?[{name:platform==='steam'?'峰值在线':'实时人数',type:'line',smooth:true,
+        data:j.history.map(h=>[h.date,h[metric]]),itemStyle:{color:'#58a6ff'},areaStyle:{opacity:.2}}]:[];
+      if(platform==='steam'&&j.history.some(h=>h.reviews_total!=null)){
+        series.push({name:'累计评论',type:'line',yAxisIndex:1,smooth:true,
+          data:j.history.map(h=>[h.date,h.reviews_total]),itemStyle:{color:'#d29922'}});}
+      hc.setOption({
+        tooltip:{trigger:'axis'},legend:{textStyle:{color:'#8b949e'},top:0},
+        grid:{left:60,right:60,top:30,bottom:30},
+        xAxis:{type:'time',axisLabel:{color:'#8b949e'}},
+        yAxis:[{type:'value',axisLabel:{color:'#8b949e',formatter:v=>fmt(v)},splitLine:{lineStyle:{color:'#21262d'}}},
+               {type:'value',axisLabel:{color:'#8b949e',formatter:v=>fmt(v)},splitLine:{show:false}}],
+        series},true);
+    }else{
+      $('chart-gamehist').innerHTML='<div class="empty-tip">历史曲线需 ≥2 天快照（每日自动积累）</div>';
+    }
+  }catch(e){console.error(e);$('modal-body').innerHTML='<div class="empty-tip">加载失败</div>'}
+}
+
+loadOverview();
+</script>
+</body>
+</html>
