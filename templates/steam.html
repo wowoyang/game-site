@@ -126,6 +126,7 @@ tr:hover td{background:#1c2129}
   <div class="grid-2">
     <div class="card"><h2>🏷️ 玩法标签份额 <span class="src">本页样本玩家投票覆盖</span></h2><div id="c-tags" class="chart"></div></div>
     <div class="card"><h2>🏭 厂商格局 <span class="src">按旗下游戏峰值在线合计 Top15（本页样本）</span></h2><div id="c-devs" class="chart"></div></div>
+    <div class="card" style="grid-column:1/-1"><h2>🕸️ 厂商关系网络 <span class="src">开发商→发行商合作图 · 节点大小=合作款数 · 边宽=共同游戏数 · 点击节点看厂商全部游戏</span></h2><div id="c-relations" class="chart" style="height:640px"></div><div id="rel-legend" style="font-size:11px;color:var(--dim);padding:4px 8px 8px">加载中…</div></div>
   </div>
 
   <div class="card">
@@ -423,6 +424,51 @@ function openDetail(gameId){
 }
 function closeModal(){$('modal-mask').classList.remove('show')}
 boot();
+// ── 厂商关系网络（独立数据源，不随筛选联动）──
+(async()=>{
+  try{
+    const j=await (await fetch('/game/api/steam-relations?top=60')).json();
+    if(!j.ok){$('rel-legend').textContent=j.msg||'无数据';return}
+    const colors={pub:'#e3b341',dev:'#58a6ff'};
+    const nodes=j.nodes.map(n=>({
+      id:n.name, name:n.name.length>22?n.name.slice(0,21)+'…':n.name,
+      symbolSize:Math.min(58,10+Math.sqrt(n.value)*4.2),
+      category:n.type==='pub'?0:1,
+      itemStyle:{color:colors[n.type]},
+      label:{show:n.value>=60,fontSize:10,color:'#8b949e'},
+      value:n.value, tipType:n.type, own:n.own||0, fullName:n.name}));
+    const idx={}; j.nodes.forEach(n=>idx[n.name]=n);
+    const edges=j.edges.map(e=>({
+      source:e.source,target:e.target,value:e.value,
+      lineStyle:{width:Math.min(8,0.8+Math.sqrt(e.value)*0.9),opacity:0.35,
+                 color:'#30363d',curveness:0.12}}));
+    const ch=echarts.init($('c-relations'));
+    ch.setOption({
+      tooltip:{formatter:p=>p.dataType==='edge'
+        ?`${p.data.source} → ${p.data.target}<br/>合作 ${p.data.value} 款`
+        :`<b>${p.data.fullName||p.name}</b>（${p.data.tipType==='pub'?'发行商':'开发商'}）<br/>合作 ${p.data.value} 款${p.data.own?`<br/>自发行 ${p.data.own} 款`:''}`},
+      legend:{data:[{name:'发行商',itemStyle:{color:colors.pub}},{name:'开发商',itemStyle:{color:colors.dev}}],textStyle:{color:'#8b949e',fontSize:11},top:4},
+      series:[{type:'graph',layout:'force',roam:true,draggable:true,
+        categories:[{name:'发行商'},{name:'开发商'}],
+        force:{repulsion:260,edgeLength:[35,140],gravity:0.08,friction:0.25},
+        nodes:nodes,links:edges,
+        emphasis:{focus:'adjacency',lineStyle:{opacity:0.9,width:3}},
+        label:{position:'right'},
+        lineStyle:{color:'#30363d'}}]
+    });
+    ch.on('click',p=>{
+      if(p.dataType!=='node')return;
+      const nm=p.data.fullName||p.name;
+      $('f-q').value=nm; STATE.q=nm; STATE.page=0; apply();
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+    window.addEventListener('resize',()=>ch.resize());
+    const pubs=j.nodes.filter(n=>n.type==='pub').length;
+    const devs=j.nodes.length-pubs;
+    const top=j.edges[0];
+    $('rel-legend').innerHTML=`发行商 ${pubs} 家(金) + 开发商 ${devs} 家(蓝) · ${j.edges.length} 条合作边 · 最强搭档: ${top?esc(top.source)+' ↔ '+esc(top.value)+' 款 '+esc(top.target):'—'} · ${esc(j.note||'')} · 拖拽/滚轮缩放可探索`;
+  }catch(e){$('rel-legend').textContent='关系图加载失败: '+e.message}
+})();
 </script>
 </body>
 </html>

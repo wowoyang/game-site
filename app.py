@@ -610,6 +610,62 @@ def api_steam_why():
 
 
 @app.route("/api/steam-facets")
+@app.route("/api/steam-relations")
+def api_steam_relations():
+    """厂商关系图数据：developer→publisher 合作网络（全部真实观测）。
+    节点=厂商，边=合作款数（dev≠pub）；同厂商自发行不连边。
+    top: 取合作量最大的前 N 家发行商及其全部合作开发商。"""
+    con = db()
+    try:
+        top = min(200, max(5, int(request.args.get("top", "60"))))
+    except ValueError:
+        top = 60
+    # 核心发行商（按合作款数）
+    pubs = con.execute(
+        """SELECT publisher, COUNT(*) n FROM games
+           WHERE platform='steam' AND developer IS NOT NULL
+             AND publisher IS NOT NULL AND developer != publisher
+           GROUP BY publisher ORDER BY n DESC LIMIT ?""", (top,)).fetchall()
+    pub_names = [p[0] for p in pubs]
+    if not pub_names:
+        con.close()
+        return jsonify({"ok": False, "msg": "无合作关系数据"})
+    ph = ",".join("?" * len(pub_names))
+    edges = con.execute(
+        f"""SELECT developer, publisher, COUNT(*) n FROM games
+            WHERE platform='steam' AND developer != publisher
+              AND developer IS NOT NULL AND publisher IS NOT NULL
+              AND publisher IN ({ph})
+            GROUP BY developer, publisher ORDER BY n DESC LIMIT 800""",
+        pub_names).fetchall()
+    devs = {}
+    for d, p, n in edges:
+        devs[d] = devs.get(d, 0) + n
+    nodes, seen = [], set()
+    # 发行商节点（大小=合作款数）
+    for p, n in pubs:
+        nodes.append({"name": p, "type": "pub", "value": n,
+                      "own": con.execute(
+                          "SELECT COUNT(*) FROM games WHERE platform='steam' "
+                          "AND publisher=? AND developer=publisher",
+                          (p,)).fetchone()[0]})
+        seen.add(p)
+    # 开发商节点（大小=与核心发行商合作款数）
+    for d, n in sorted(devs.items(), key=lambda x: -x[1])[:400]:
+        if d not in seen:
+            nodes.append({"name": d, "type": "dev", "value": n})
+            seen.add(d)
+    con.close()
+    return jsonify({
+        "ok": True,
+        "nodes": nodes,
+        "edges": [{"source": d, "target": p, "value": n}
+                  for d, p, n in edges if d in seen and p in seen],
+        "note": "节点=厂商(大小:发行商=合作款数/开发商=合作款数) 边宽=合作游戏数 "
+                "来源: SteamSpy /all developer×publisher 直接观测",
+    })
+
+
 def api_steam_facets():
     """研究页筛选面板聚合（全量口径）：宇宙规模/活跃数/年份/类型/标签/厂商。"""
     con = db()
