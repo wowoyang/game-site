@@ -254,7 +254,7 @@ function renderDetail(j){
   for(const [k,lbl,cls] of COLS.slice(1))th+='<th class="num-r sortable" data-k="'+k+'">'+lbl+'</th>';
   th+='<th>类型/标签</th></tr>';
   const tr=j.games.map(g=>{
-    let row='<tr><td><div class="gname" onclick="openDetail(\''+esc(g.game_id)+'\')">'+esc(g.name)+(g.name_cn?'<span class="gcn">'+esc(g.name_cn)+'</span>':'')+'</div><div class="gsub">'+esc(g.developer||'')+'</div></td>';
+    let row='<tr><td><div style="display:flex;align-items:center;gap:8px"><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/'+esc(g.game_id)+'/header.jpg" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="width:34px;height:34px;border-radius:8px;object-fit:cover;background:var(--bg3)"><div><div class="gname" onclick="openDetail(\''+esc(g.game_id)+'\')">'+esc(g.name)+(g.name_cn?'<span class="gcn">'+esc(g.name_cn)+'</span>':'')+'</div><div class="gsub">'+esc(g.developer||'')+'</div></div></div></td>';
     row+='<td class="num-r">'+(g.rank?'#'+g.rank:'—')+'</td>';
     row+='<td class="num-r">'+fmt(g.peak_in_game)+'</td>';
     row+='<td class="num-r">'+fmt(g.ccu)+'</td>';
@@ -398,8 +398,9 @@ function openDetail(gameId){
   if(g.release_date)kv.push(['发行日期',esc(g.release_date)]);
   if(g.publisher)kv.push(['发行商',esc(g.publisher)]);
   $('modal-body').innerHTML=
-    '<h3>'+esc(g.name)+(g.name_cn?' <span style="color:var(--gold);font-size:14px">'+esc(g.name_cn)+'</span>':'')+'</h3>'+
-    '<div class="sub">🎮 Steam ｜ '+((g.genres||[]).map(esc).join(' · ')||'—')+'</div>'+
+    '<div style="display:flex;gap:12px;align-items:flex-start"><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/'+esc(g.game_id)+'/header.jpg" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="width:184px;border-radius:6px;flex-shrink:0">'+
+    '<div><h3>'+esc(g.name)+(g.name_cn?' <span style="color:var(--gold);font-size:14px">'+esc(g.name_cn)+'</span>':'')+'</h3>'+
+    '<div class="sub">🎮 Steam ｜ '+((g.genres||[]).map(esc).join(' · ')||'—')+'</div></div></div>'+
     (g.desc_cn?'<div style="font-size:13px;line-height:1.7;color:var(--muted);margin:8px 0">'+esc(g.desc_cn)+'</div>':'')+
     '<a href="https://store.steampowered.com/app/'+esc(g.game_id)+'" target="_blank" style="font-size:12px">↗ Steam 商店页</a>'+
     '<div class="kv">'+kv.map(([k,v])=>'<div class="item"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('')+'</div>'+

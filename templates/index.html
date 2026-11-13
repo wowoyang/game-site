@@ -303,6 +303,7 @@ function steamHotTable(rows){
     return `<tr class="${r.new_entry||r.rank_jump>=10?'fire-row':''}">
       <td>${r.rank!=null?'#'+r.rank:'—'}</td>
       <td><div class="name-cell">
+        <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${r.game_id}/header.jpg" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">
         <div><div class="gname" onclick="openGame('steam','${r.game_id}')">${platBadge('steam')}${nameHtml(r)}</div>
         <div class="gsub">${esc(r.developer||'')} ${r.release_date?esc(r.release_date):''}</div></div></div></td>
       <td>${sig.join(' ')||'—'}</td>
@@ -372,7 +373,7 @@ function renderPop(){
       const chg=r.ccu_chg_1d_pct!=null?`<span class="${r.ccu_chg_1d_pct>=0?'chg-up':'chg-down'}">${r.ccu_chg_1d_pct>=0?'↑':'↓'}${Math.abs(r.ccu_chg_1d_pct)}%</span>`:'';
       return `<tr>
         <td>${r.rank!=null?'#'+r.rank:'—'}</td>
-        <td>${platBadge('steam')}<div class="gname" onclick="openGame('steam','${r.game_id}')">${nameHtml(r)}</div><div class="gsub">${esc(r.developer||'')}</div></td>
+        <td><div class="name-cell"><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${r.game_id}/header.jpg" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'"><div>${platBadge('steam')}<div class="gname" onclick="openGame('steam','${r.game_id}')">${nameHtml(r)}</div><div class="gsub">${esc(r.developer||'')}</div></div></div></td>
         <td class="num-r">${fmt(r.peak_in_game||r.ccu)} ${chg}</td>
         <td class="num-r">${r.userscore!=null?r.userscore+'%':'—'}</td>
         <td class="num-r">${fmt(r.reviews_total)}</td>
