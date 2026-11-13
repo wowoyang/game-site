@@ -1023,7 +1023,9 @@ def enrich_steam_parallel(con, max_games=5000, workers=5, skip_spy=False):
     for aid, name, rel, genres, mj in rows:
         m = json.loads(mj or '{}')
         if rel and genres and m.get("price_usd") is not None:
-            continue
+            continue  # 关键字段已齐
+        if m.get("enrich_tried"):
+            continue  # 已尝试过（Valve 空返回/无价格数据的游戏）——防死循环
         todo.append((aid, name, rel, genres, m))
     act_todo = [t for t in todo if t[0] in act]
     cold_todo = [t for t in todo if t[0] not in act]
@@ -1042,7 +1044,13 @@ def enrich_steam_parallel(con, max_games=5000, workers=5, skip_spy=False):
         desc_cn = None
         j = http_json(
             f"https://store.steampowered.com/api/appdetails?appids={aid}&cc=us&l=en")
-        dat = ((j or {}).get(aid) or {}).get("data") or {}
+        node = (j or {}).get(aid) or {}
+        dat = node.get("data") or {}
+        # 403/网络失败 → 请求不可信，不记 tried（下轮重试）；
+        # Valve 正常返回但 data 为空 → 游戏无商店数据，记 tried 终止重试
+        api_ok = bool(node) and node.get("success") is not None
+        if not api_ok:
+            return (aid, None, None, None, None, None, None, False)
         if dat:
             if (dat.get("price_overview") or {}).get("final") is not None:
                 meta["price_usd"] = dat["price_overview"]["final"] / 100
@@ -1069,15 +1077,24 @@ def enrich_steam_parallel(con, max_games=5000, workers=5, skip_spy=False):
                 meta["negative"] = spy["negative"]
         rel_v = ((dat.get("release_date") or {}).get("date")) or rel
         gen_v = [g["description"] for g in (dat.get("genres") or [])] or None
-        return (aid, rel_v, gen_v, genres, {**m, **meta}, cn, desc_cn)
+        # 有 dat 但关键字段仍缺（如 Deadlock 未发行）→ 记 tried
+        m2 = {**m, **meta}
+        if dat and m2.get("price_usd") is None:
+            m2["enrich_tried"] = True
+        return (aid, rel_v, gen_v, genres, m2, cn, desc_cn, True)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = [ex.submit(fetch_one, item) for item in todo]
+        api_fail = 0
         for fut in as_completed(futs):
             try:
-                aid, rel_v, gen_v, genres, m2, cn, desc_cn = fut.result()
+                aid, rel_v, gen_v, genres, m2, cn, desc_cn, api_ok = fut.result()
             except Exception:
+                api_fail += 1
                 continue
+            if not api_ok:
+                api_fail += 1
+                continue  # 请求失败不写库，下轮重试
             try:
                 if cn:
                     con.execute(
@@ -1103,6 +1120,9 @@ def enrich_steam_parallel(con, max_games=5000, workers=5, skip_spy=False):
             except sqlite3.OperationalError as e:
                 log(f"  write skip {aid}: {e}")
     con.commit()
+    # API 大面积失败 → 抛异常让外层暂停（防 403 时空转）
+    if api_fail > len(todo) * 0.5 and len(todo) > 50:
+        raise RuntimeError(f"API 失败率过高 ({api_fail}/{len(todo)})，疑似被封，暂停")
     log(f"parallel enrich 完成: 本轮 {done}/{len(todo)} 款")
     return done
 
