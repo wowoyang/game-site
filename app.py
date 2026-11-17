@@ -91,6 +91,41 @@ def api_overview():
 
 # ------------------------------------------------------------ 爆火 API -----
 
+@app.route("/api/new-releases/cal")
+def api_new_releases_cal():
+    """新发售月历数据：某月逐日新发售计数（真实观测，已收录口径）。
+    month=YYYY-MM，默认当月。返回整月天数 + 首日星期（周一=0）。"""
+    con = db()
+    import datetime as dt
+    month = (request.args.get("month") or "").strip()
+    try:
+        y, m = map(int, month.split("-"))
+        first = dt.date(y, m, 1)
+    except Exception:
+        first = dt.date.today().replace(day=1)
+        y, m = first.year, first.month
+    nxt = dt.date(y + 1, 1, 1) if m == 12 else dt.date(y, m + 1, 1)
+    rows = con.execute(
+        "SELECT release_date, COUNT(*) n FROM games WHERE platform='steam' "
+        "AND release_date IS NOT NULL GROUP BY release_date").fetchall()
+    counts = {}
+    for rdate, n in rows:
+        try:
+            d = dt.datetime.strptime(rdate, "%b %d, %Y").date()
+        except ValueError:
+            continue
+        counts[d.isoformat()] = counts.get(d.isoformat(), 0) + n
+    days = []
+    d = first
+    while d < nxt:
+        days.append({"date": d.isoformat(), "count": counts.get(d.isoformat(), 0)})
+        d += dt.timedelta(days=1)
+    con.close()
+    return jsonify({"ok": True, "month": f"{y:04d}-{m:02d}",
+                    "first_weekday": first.weekday(), "days": days,
+                    "month_total": sum(x["count"] for x in days)})
+
+
 @app.route("/api/new-releases")
 def api_new_releases():
     """Steam 每日新发售（官方搜索接口 Released_DESC，真实发售日观测）。

@@ -82,6 +82,18 @@ h3 .gcn{font-size:15px}
 .filter-row .seg button{background:transparent;border:none;color:var(--muted);padding:6px 16px;cursor:pointer;font-size:13px}
 .filter-row .seg button.active{background:#1f6feb33;color:var(--accent);font-weight:600}
 .nr-cell.sel{box-shadow:0 0 0 2px var(--accent) inset;font-weight:700}
+/* 月历 */
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;max-width:560px}
+.cal-grid.cal-head div{text-align:center;font-size:11px;color:var(--dim);padding:2px 0}
+.cal-day{position:relative;min-height:52px;border:1px solid var(--border);border-radius:8px;cursor:pointer;
+  display:flex;align-items:flex-end;justify-content:flex-end;padding:4px 6px;transition:transform .08s}
+.cal-day:hover{transform:scale(1.05);border-color:var(--accent)}
+.cal-day .d{position:absolute;top:4px;left:6px;font-size:11px;opacity:.85}
+.cal-day .n{font-size:13px;font-weight:700}
+.cal-day.sel{box-shadow:0 0 0 2px var(--accent) inset}
+.cal-day.today{border-color:var(--accent);border-width:2px}
+.cal-nav{background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:6px;
+  width:28px;height:24px;cursor:pointer;font-size:14px;line-height:1}
 .legend-note{font-size:12px;color:var(--dim);margin-top:8px}
 .legend-note b{color:var(--muted)}
 .empty-tip{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
@@ -218,8 +230,8 @@ h3 .gcn{font-size:15px}
         <button data-d="3" class="active">3天</button><button data-d="7">7天</button><button data-d="14">14天</button>
       </span>
     </h2>
-    <div id="nr-calendar" style="display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 4px"></div>
-    <div class="src" id="nr-cal-tip" style="margin-bottom:6px">近 60 天发售热力（颜色越深当日新游越多，点击某天筛选）<span id="nr-clear" style="display:none;margin-left:10px;cursor:pointer;color:var(--accent)">✕ 清除筛选</span></div>
+    <div id="nr-calendar"></div>
+    <div class="src" id="nr-cal-tip" style="margin:6px 0">背景色越深=当日新发售越多（真实观测）· 点击某天筛选该日 · 再点取消<span id="nr-clear" style="display:none;margin-left:10px;cursor:pointer;color:var(--accent)">✕ 清除筛选</span></div>
     <div id="nr-body"><div class="loading">加载中…</div></div>
   </div>
 </div>
@@ -529,30 +541,49 @@ async function loadEpic(){
 }
 
 /* ============ 新发售 ============ */
-let NR_STATE={days:3,date:null};
+let NR_STATE={days:3,date:null,month:null};
+const NR_MONTH_CN=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
 function nrHeat(c,max){
-  // 0 → 透明；count 越高越亮（绿色系热力）
   if(!c)return 'transparent';
   const t=Math.min(1,Math.sqrt(c/(max||1)));
-  return `rgba(74,222,128,${0.15+t*0.85})`;
+  return `rgba(74,222,128,${0.12+t*0.88})`;
 }
-function nrRenderCal(calendar){
-  const max=Math.max(...calendar.map(d=>d.count),1);
-  const today=new Date().toISOString().slice(0,10);
-  $('nr-calendar').innerHTML=calendar.map(d=>{
-    const sel=d.date===NR_STATE.date;
-    return `<div class="nr-cell${sel?' sel':''}" data-date="${d.date}" title="${d.date}：${d.count} 款新发售"
-      style="width:30px;height:30px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;
-      font-size:10px;color:${d.count?'#0b1a10':'var(--muted)'};
-      background:${nrHeat(d.count,max)};
-      outline:${d.date===today?'2px solid var(--accent)':'none'};outline-offset:-2px">
-      ${d.date.slice(8)}</div>`;
-  }).join('');
-  document.querySelectorAll('.nr-cell').forEach(c=>c.onclick=()=>{
-    const d=c.dataset.date;
-    NR_STATE.date = NR_STATE.date===d?null:d;   // 再点一次=取消
-    loadNewRel(NR_STATE.days,true);
-  });
+async function nrRenderCal(){
+  const month=NR_STATE.month||new Date().toISOString().slice(0,7);
+  try{
+    const j=await (await fetch(`/game/api/new-releases/cal?month=${month}`)).json();
+    if(!j.ok){$('nr-calendar').innerHTML=j.msg||'无数据';return}
+    const max=Math.max(...j.days.map(d=>d.count),1);
+    const today=new Date().toISOString().slice(0,10);
+    const [y,m]=j.month.split('-').map(Number);
+    const prevM=m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;
+    const nextM=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;
+    // 周标题 + 前置空白 + 日期格
+    let html=`<div style="display:flex;align-items:center;gap:10px;margin:8px 0 6px">
+      <button class="cal-nav" data-m="${prevM}">‹</button>
+      <b style="min-width:110px;text-align:center">${y} 年 ${NR_MONTH_CN[m-1]}</b>
+      <button class="cal-nav" data-m="${nextM}">›</button>
+      <span class="src">本月 ${j.month_total} 款新发售</span></div>
+      <div class="cal-grid cal-head">${['一','二','三','四','五','六','日'].map(w=>`<div>${w}</div>`).join('')}</div>
+      <div class="cal-grid" style="grid-template-columns:repeat(7,minmax(0,1fr))">${'<div></div>'.repeat(j.first_weekday)}`;
+    html+=j.days.map(d=>{
+      const sel=d.date===NR_STATE.date;
+      const isToday=d.date===today;
+      return `<div class="cal-day${sel?' sel':''}${isToday?' today':''}" data-date="${d.date}" title="${d.date}：${d.count} 款新发售"
+        style="background:${nrHeat(d.count,max)};color:${d.count?'#0b1a10':'var(--dim)'}">
+        <span class="d">${+d.date.slice(8)}</span><span class="n">${d.count||''}</span></div>`;
+    }).join('');
+    html+='</div>';
+    $('nr-calendar').innerHTML=html;
+    document.querySelectorAll('.cal-nav').forEach(b=>b.onclick=()=>{
+      NR_STATE.month=b.dataset.m;nrRenderCal();
+    });
+    document.querySelectorAll('.cal-day').forEach(c=>c.onclick=()=>{
+      const d=c.dataset.date;
+      NR_STATE.date = NR_STATE.date===d?null:d;   // 再点一次=取消
+      nrRenderCal();loadNewRel(NR_STATE.days,true);
+    });
+  }catch(e){$('nr-calendar').innerHTML='<div class="empty-tip">日历加载失败</div>'}
 }
 async function loadNewRel(days,keepDays){
   if(!keepDays)NR_STATE.days=days;
@@ -561,12 +592,12 @@ async function loadNewRel(days,keepDays){
     document.querySelectorAll('#nr-days button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');NR_STATE.days=+b.dataset.d;NR_STATE.date=null;loadNewRel(NR_STATE.days,true);
   });
-  $('nr-clear').onclick=()=>{NR_STATE.date=null;loadNewRel(NR_STATE.days,true);};
+  $('nr-clear').onclick=()=>{NR_STATE.date=null;nrRenderCal();loadNewRel(NR_STATE.days,true);};
   const q=NR_STATE.date?`date=${NR_STATE.date}`:`days=${NR_STATE.days}`;
   try{
     const j=await (await fetch(`/game/api/new-releases?${q}`)).json();
     if(!j.ok){$('nr-body').innerHTML=j.msg;return}
-    nrRenderCal(j.calendar||[]);
+    nrRenderCal();
     $('nr-clear').style.display=NR_STATE.date?'inline':'none';
     if(!j.by_day.length){$('nr-body').innerHTML=`<div class="empty-tip">${NR_STATE.date?NR_STATE.date+' 无新发售记录':'窗口内无新发售'}</div>`;return}
     $('nr-body').innerHTML=j.by_day.map(d=>{
