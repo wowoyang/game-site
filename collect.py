@@ -21,6 +21,7 @@
 """
 import json
 import os
+import re
 import sqlite3
 import ssl
 import time
@@ -973,6 +974,73 @@ def collect_insights(con, date=None, max_games=120):
     log(f"insights 完成: {len(rows)} 款已采集")
 
 
+def collect_new_releases(con, date, days=5, max_pages=12):
+    """Steam 每日新发售追踪（官方搜索接口 sort_by=Released_DESC）。
+    只入库真实观测：appid+名称+官方发售日字符串；含当日新游戏时顺带
+    l=schinese 中文名探测（可失败，不影响入库）。幂等。
+    返回 (新增数, 入库总数)。"""
+    import urllib.request
+    UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    def _fetch(start):
+        url = ("https://store.steampowered.com/search/results/?query"
+               f"&start={start}&count=50&sort_by=Released_DESC&infinite=1"
+               "&cc=us&l=en&category1=998")
+        req = urllib.request.Request(url, headers=UA)
+        j = json.loads(urllib.request.urlopen(req, timeout=20).read())
+        html = j.get("results_html", "")
+        items = []
+        for blk in html.split('search_result_row'):
+            m_id = re.search(r'data-ds-appid="(\d+)"', blk)
+            if not m_id:
+                continue
+            m_name = re.search(r'class="title">\s*([^<]+)', blk)
+            m_date = re.search(r'responsive_secondrow">\s*([A-Z][a-z]{2} \d{1,2}, \d{4})', blk)
+            coming = 'Coming soon' in blk
+            items.append((m_id.group(1), (m_name.group(1) if m_name else '').strip(),
+                          m_date.group(1) if m_date else None, coming))
+        return items
+
+    import datetime as _dt
+    cutoff = _dt.date.today() - _dt.timedelta(days=days)
+    added, seen = 0, 0
+    for page in range(max_pages):
+        try:
+            items = _fetch(page * 50)
+        except Exception as e:
+            log(f"new_releases page {page} fail: {e}")
+            break
+        if not items:
+            break
+        stop = False
+        for aid, name, rdate, coming in items:
+            if coming or not rdate:
+                continue  # 未发售跳过
+            try:
+                d = _dt.datetime.strptime(rdate, "%b %d, %Y").date()
+            except ValueError:
+                continue
+            if d < cutoff:
+                stop = True
+                break
+            seen += 1
+            exists = con.execute(
+                "SELECT 1 FROM games WHERE platform='steam' AND game_id=?",
+                (aid,)).fetchone()
+            if exists:
+                continue
+            con.execute(
+                "INSERT OR IGNORE INTO games (platform, game_id, name, release_date) "
+                "VALUES ('steam',?,?,?)", (aid, name, rdate))
+            added += 1
+        if stop:
+            break
+        time.sleep(1.2)
+    con.commit()
+    log(f"new_releases: 窗口 {days}d 新增 {added} 款（扫描 {seen} 款已发售）")
+    return added, seen
+
+
 def main():
     started = time.time()
     date = today()
@@ -981,8 +1049,8 @@ def main():
                 (date, datetime.now().isoformat(timespec="seconds")))
     con.commit()
 
-    for fn in (collect_steam, collect_steam_universe, collect_roblox,
-               collect_epic, collect_taptap, collect_insights):
+    for fn in (collect_steam, collect_steam_universe, collect_new_releases,
+               collect_roblox, collect_epic, collect_taptap, collect_insights):
         name = fn.__name__
         try:
             fn(con, date)

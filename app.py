@@ -91,6 +91,42 @@ def api_overview():
 
 # ------------------------------------------------------------ 爆火 API -----
 
+@app.route("/api/new-releases")
+def api_new_releases():
+    """Steam 每日新发售（官方搜索接口 Released_DESC，真实发售日观测）。
+    days: 回看窗口（默认7）；返回按发售日倒序。"""
+    con = db()
+    days = int(request.args.get("days", 7) or 7)
+    # 解析 release_date 字符串为可比日期
+    rows = con.execute(
+        """SELECT game_id, name, name_cn, release_date, developer, genres, meta_json
+           FROM games WHERE platform='steam'
+           AND release_date IS NOT NULL""").fetchall()
+    import datetime as dt
+    from collections import defaultdict
+    cutoff = dt.date.today() - dt.timedelta(days=days)
+    byday = defaultdict(list)
+    for r in rows:
+        try:
+            d = dt.datetime.strptime(r["release_date"], "%b %d, %Y").date()
+        except ValueError:
+            continue
+        if d < cutoff:
+            continue
+        meta = jload(r["meta_json"], {}) or {}
+        byday[d.isoformat()].append({
+            "game_id": r["game_id"], "name": r["name"], "name_cn": r["name_cn"],
+            "developer": r["developer"], "genres": jload(r["genres"], []),
+            "price_usd": meta.get("price_usd"),
+            "reviews_total": meta.get("reviews_total_store"),
+            "source": "Steam官方搜索接口",
+        })
+    days_out = [{"date": d, "count": len(v), "games": v}
+                for d, v in sorted(byday.items(), reverse=True)]
+    con.close()
+    return jsonify({"ok": True, "days": days, "by_day": days_out})
+
+
 @app.route("/api/hot")
 def api_hot():
     """近期爆火：真实动量信号（全部为源 API 直接观测，非估算）

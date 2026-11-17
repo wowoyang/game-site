@@ -113,6 +113,7 @@ h3 .gcn{font-size:15px}
   <button data-view="hot">🔥 近期爆火</button>
   <button data-view="popular">⭐ 饱受欢迎</button>
   <button data-view="tags">🧩 玩法关联</button>
+  <button data-view="newrel">🆕 新发售</button>
   <button data-view="epic">🎁 Epic 免费</button>
 </nav>
 
@@ -207,6 +208,18 @@ h3 .gcn{font-size:15px}
     <div id="epic-list"><div class="loading">加载中…</div></div>
   </div>
 </div>
+
+<!-- ================= 新发售 ================= -->
+<div class="view" id="view-newrel">
+  <div class="card" style="grid-column:1/-1">
+    <h2>🆕 Steam 每日新发售 <span class="src">Steam官方搜索接口（Released_DESC）· 每日 8:05 采集</span>
+      <span class="seg" id="nr-days" style="margin-left:8px">
+        <button data-d="3" class="active">3天</button><button data-d="7">7天</button><button data-d="14">14天</button>
+      </span>
+    </h2>
+    <div id="nr-body"><div class="loading">加载中…</div></div>
+  </div>
+</div>
 </div>
 
 <!-- 游戏详情弹窗 -->
@@ -255,6 +268,7 @@ function lazyLoad(v){
   if(v==='popular'&&!loaded.popular){loaded.popular=1;loadPopular();}
   if(v==='tags'&&!loaded.tags){loaded.tags=1;loadTags('steam');}
   if(v==='epic'&&!loaded.epic){loaded.epic=1;loadEpic();}
+  if(v==='newrel'&&!loaded.newrel){loaded.newrel=1;loadNewRel(3);}
 }
 
 /* ============ 总览 ============ */
@@ -509,6 +523,33 @@ async function loadEpic(){
     </tr>`).join('');
     $('epic-list').innerHTML=`<table><tr><th>游戏</th><th>状态</th><th class="num-r">原价</th><th>链接</th></tr>${rows}</table>`;
   }catch(e){$('epic-list').innerHTML='<div class="empty-tip">加载失败</div>'}
+}
+
+/* ============ 新发售 ============ */
+async function loadNewRel(days){
+  $('nr-body').innerHTML='<div class="loading">加载中…</div>';
+  document.querySelectorAll('#nr-days button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#nr-days button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');loadNewRel(+b.dataset.d);
+  });
+  try{
+    const j=await (await fetch(`/game/api/new-releases?days=${days}`)).json();
+    if(!j.ok){$('nr-body').innerHTML=j.msg;return}
+    if(!j.by_day.length){$('nr-body').innerHTML='<div class="empty-tip">窗口内无新发售</div>';return}
+    $('nr-body').innerHTML=j.by_day.map(d=>{
+      const today=new Date().toISOString().slice(0,10);
+      const isToday=d.date===today;
+      const rows=d.games.map(g=>`<tr>
+        <td><div class="name-cell"><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${g.game_id}/header.jpg" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">
+          <div>${platBadge('steam')}<div class="gname" onclick="openGame('steam','${g.game_id}')">${nameHtml(g)}</div><div class="gsub">${esc(g.developer||'')}</div></div></div></td>
+        <td class="num-r">${g.price_usd!=null?(g.price_usd===0?'免费':'$'+g.price_usd):'—'}</td>
+        <td>${(g.genres||[]).slice(0,3).map(x=>`<span class="pill">${esc(x)}</span>`).join('')||'—'}</td>
+        <td><a href="https://store.steampowered.com/app/${g.game_id}" target="_blank">商店页 ↗</a></td>
+      </tr>`).join('');
+      return `<h3 style="margin:14px 0 8px">${d.date} ${isToday?'<span class="pill new">今天</span>':''} <span class="src">${d.count} 款</span></h3>
+        <table><tr><th>游戏</th><th class="num-r">价格</th><th>类型</th><th>链接</th></tr>${rows}</table>`;
+    }).join('');
+  }catch(e){$('nr-body').innerHTML='<div class="empty-tip">加载失败</div>'}
 }
 
 /* ============ 详情弹窗 ============ */
