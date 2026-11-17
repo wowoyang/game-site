@@ -120,10 +120,20 @@ def api_new_releases_cal():
     while d < nxt:
         days.append({"date": d.isoformat(), "count": counts.get(d.isoformat(), 0)})
         d += dt.timedelta(days=1)
+    # 有真实发售观测的年份（供年下拉）
+    years = [r[0] for r in con.execute(
+        "SELECT DISTINCT substr(release_date,-4) y FROM games "
+        "WHERE platform='steam' AND release_date IS NOT NULL "
+        "AND substr(release_date,-4) GLOB '[12][0-9][0-9][0-9]' ORDER BY y").fetchall()]
+    cur_year = str(dt.date.today().year)
+    if cur_year not in years:
+        years.append(cur_year)
+        years.sort()
     con.close()
     return jsonify({"ok": True, "month": f"{y:04d}-{m:02d}",
                     "first_weekday": first.weekday(), "days": days,
-                    "month_total": sum(x["count"] for x in days)})
+                    "month_total": sum(x["count"] for x in days),
+                    "years": years})
 
 
 @app.route("/api/new-releases")
@@ -135,21 +145,50 @@ def api_new_releases():
     con = db()
     days = int(request.args.get("days", 7) or 7)
     date_filter = (request.args.get("date") or "").strip()
-    rows = con.execute(
-        """SELECT game_id, name, name_cn, release_date, developer, genres, meta_json
-           FROM games WHERE platform='steam'
-           AND release_date IS NOT NULL""").fetchall()
     import datetime as dt
     from collections import defaultdict
-    # 日历窗口：60 天（覆盖两个月视图）
-    cal_cutoff = dt.date.today() - dt.timedelta(days=60)
+    # 日历计数：SQL 聚合全部历史（快）
+    cal_rows = con.execute(
+        "SELECT release_date, COUNT(*) n FROM games WHERE platform='steam' "
+        "AND release_date IS NOT NULL GROUP BY release_date").fetchall()
+    counts = {}
+    for rdate, n in cal_rows:
+        try:
+            d = dt.datetime.strptime(rdate, "%b %d, %Y").date()
+        except ValueError:
+            continue
+        counts[d.isoformat()] = counts.get(d.isoformat(), 0) + n
+    calendar = [{"date": (dt.date.today() - dt.timedelta(days=i)).isoformat(),
+                 "count": counts.get((dt.date.today() - dt.timedelta(days=i)).isoformat(), 0)}
+                for i in range(59, -1, -1)]
+    # 游戏明细：精确日期 or 窗口（SQL 侧先过滤到目标日集合，避免全表解析）
+    def rdate_variants(d):
+        # 库中日期来自 Valve/搜索接口，日号可能带/不带前导零（Mar 1 / Mar 01）
+        return {d.strftime("%b %d, %Y"), f"{d.strftime('%b')} {d.day}, {d.year}"}
+    if date_filter:
+        try:
+            target = dt.datetime.strptime(date_filter, "%Y-%m-%d").date()
+            rdates = sorted(rdate_variants(target))
+        except ValueError:
+            rdates = []
+    else:
+        cutoff = dt.date.today() - dt.timedelta(days=days)
+        vs = set()
+        for i in range(days + 1):
+            vs |= rdate_variants(cutoff + dt.timedelta(days=i))
+        rdates = sorted(vs)
+    rows = []
+    if rdates:
+        qmarks = ",".join("?" * len(rdates))
+        rows = con.execute(
+            f"""SELECT game_id, name, name_cn, release_date, developer, genres, meta_json
+                FROM games WHERE platform='steam' AND release_date IN ({qmarks})""",
+            rdates).fetchall()
     byday = defaultdict(list)
     for r in rows:
         try:
             d = dt.datetime.strptime(r["release_date"], "%b %d, %Y").date()
         except ValueError:
-            continue
-        if d < cal_cutoff:
             continue
         meta = jload(r["meta_json"], {}) or {}
         byday[d.isoformat()].append({
@@ -159,10 +198,6 @@ def api_new_releases():
             "reviews_total": meta.get("reviews_total_store"),
             "source": "Steam官方搜索接口",
         })
-    # 日历：60 天逐日计数（真实观测）
-    calendar = [{"date": (dt.date.today() - dt.timedelta(days=i)).isoformat(),
-                 "count": len(byday.get((dt.date.today() - dt.timedelta(days=i)).isoformat(), []))}
-                for i in range(59, -1, -1)]
     # 天列表：精确日期筛选 or 窗口
     if date_filter:
         days_out = [{"date": date_filter,

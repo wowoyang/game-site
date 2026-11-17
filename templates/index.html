@@ -94,6 +94,8 @@ h3 .gcn{font-size:15px}
 .cal-day.today{border-color:var(--accent);border-width:2px}
 .cal-nav{background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:6px;
   width:28px;height:24px;cursor:pointer;font-size:14px;line-height:1}
+.cal-sel{background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:6px;
+  padding:3px 8px;font-size:13px;cursor:pointer}
 .legend-note{font-size:12px;color:var(--dim);margin-top:8px}
 .legend-note b{color:var(--muted)}
 .empty-tip{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
@@ -558,10 +560,11 @@ async function nrRenderCal(){
     const [y,m]=j.month.split('-').map(Number);
     const prevM=m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;
     const nextM=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;
-    // 周标题 + 前置空白 + 日期格
-    let html=`<div style="display:flex;align-items:center;gap:10px;margin:8px 0 6px">
+    // 周标题 + 前置空白 + 日期格（年/月下拉可选）
+    let html=`<div style="display:flex;align-items:center;gap:10px;margin:8px 0 6px;flex-wrap:wrap">
       <button class="cal-nav" data-m="${prevM}">‹</button>
-      <b style="min-width:110px;text-align:center">${y} 年 ${NR_MONTH_CN[m-1]}</b>
+      <select id="cal-year" class="cal-sel">${(j.years&&j.years.length?j.years:[y]).map(yy=>`<option value="${yy}"${+yy===y?' selected':''}>${yy} 年</option>`).join('')}</select>
+      <select id="cal-month" class="cal-sel">${NR_MONTH_CN.map((cn,i)=>`<option value="${i+1}"${i+1===m?' selected':''}>${cn}</option>`).join('')}</select>
       <button class="cal-nav" data-m="${nextM}">›</button>
       <span class="src">本月 ${j.month_total} 款新发售</span></div>
       <div class="cal-grid cal-head">${['一','二','三','四','五','六','日'].map(w=>`<div>${w}</div>`).join('')}</div>
@@ -578,6 +581,10 @@ async function nrRenderCal(){
     document.querySelectorAll('.cal-nav').forEach(b=>b.onclick=()=>{
       NR_STATE.month=b.dataset.m;nrRenderCal();
     });
+    // 年/月下拉：切换即重渲染
+    const onPick=()=>{NR_STATE.month=`${$('cal-year').value}-${String($('cal-month').value).padStart(2,'0')}`;nrRenderCal();};
+    $('cal-year').onchange=onPick;
+    $('cal-month').onchange=onPick;
     document.querySelectorAll('.cal-day').forEach(c=>c.onclick=()=>{
       const d=c.dataset.date;
       NR_STATE.date = NR_STATE.date===d?null:d;   // 再点一次=取消
