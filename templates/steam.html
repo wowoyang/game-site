@@ -127,6 +127,7 @@ tr:hover td{background:#1c2129}
     <div class="card"><h2>🏷️ 玩法标签份额 <span class="src">本页样本玩家投票覆盖</span></h2><div id="c-tags" class="chart"></div></div>
     <div class="card"><h2>🏭 厂商格局 <span class="src">按旗下游戏峰值在线合计 Top15（本页样本）</span></h2><div id="c-devs" class="chart"></div></div>
     <div class="card" style="grid-column:1/-1"><h2>🕸️ 厂商关系网络 <span class="src">开发商→发行商合作图 · 节点大小=合作款数 · 边宽=共同游戏数 · 点击节点看厂商全部游戏</span></h2><div id="c-relations" class="chart" style="height:640px"></div><div id="rel-legend" style="font-size:11px;color:var(--dim);padding:4px 8px 8px">加载中…</div></div>
+    <div class="card" style="grid-column:1/-1"><h2>📅 Steam 年度事件表 <span class="src">Valve 官方公告流（ISteamNews）真实观测 · 公告日+官方结束日 · 每日采集</span></h2><div id="events-body"><div class="loading">加载中…</div></div></div>
   </div>
 
   <div class="card">
@@ -469,6 +470,31 @@ boot();
     const top=j.edges[0];
     $('rel-legend').innerHTML=`发行商 ${pubs} 家(金) + 开发商 ${devs} 家(蓝) · ${j.edges.length} 条合作边 · 最强搭档: ${top?esc(top.source)+' ↔ '+esc(top.value)+' 款 '+esc(top.target):'—'} · ${esc(j.note||'')} · 拖拽/滚轮缩放可探索`;
   }catch(e){$('rel-legend').textContent='关系图加载失败: '+e.message}
+})();
+
+// ── Steam 年度事件表（官方公告流真实观测）──
+(async()=>{
+  try{
+    const j=await (await fetch('/game/api/steam-events')).json();
+    if(!j.ok){$('events-body').textContent=j.msg||'无数据';return}
+    if(!j.events.length){$('events-body').textContent='本年度暂无事件公告';return}
+    const today=new Date().toISOString().slice(0,10);
+    const kindCls={seasonal:'hot',nextfest:'new',themed:'',awards:'pill'};
+    const rows=j.events.map(e=>{
+      const ongoing=e.end_date&&e.announced_date<=today&&today<=e.end_date;
+      const ended=e.end_date&&today>e.end_date;
+      const status=ongoing?'<span class="pill hot">进行中</span>':ended?'<span class="pill" style="opacity:.5">已结束</span>':'<span class="pill new">新公告</span>';
+      return `<tr>
+        <td>${e.announced_date||'—'}</td>
+        <td>${e.end_date||'—'}</td>
+        <td><span class="pill ${kindCls[e.kind]||''}">${esc(e.kind_cn)}</span></td>
+        <td><b>${esc(e.title)}</b></td>
+        <td>${status}</td>
+        <td>${e.url?`<a href="${esc(e.url)}" target="_blank">官方公告 ↗</a>`:'—'}</td>
+      </tr>`}).join('');
+    $('events-body').innerHTML=`<table><tr><th>公告日</th><th>结束日</th><th>类型</th><th>事件</th><th>状态</th><th>链接</th></tr>${rows}</table>
+      <div style="font-size:11px;color:var(--dim);padding:6px 2px">${j.year} 年共 ${j.events.length} 个事件（大促/新品节/主题节/大奖，源自 Valve 官方公告；结束日为公告正文中的官方日期，未提及则留空）</div>`;
+  }catch(e){$('events-body').textContent='事件表加载失败: '+e.message}
 })();
 </script>
 </body>

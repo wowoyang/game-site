@@ -81,6 +81,7 @@ h3 .gcn{font-size:15px}
 .filter-row .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .filter-row .seg button{background:transparent;border:none;color:var(--muted);padding:6px 16px;cursor:pointer;font-size:13px}
 .filter-row .seg button.active{background:#1f6feb33;color:var(--accent);font-weight:600}
+.nr-cell.sel{box-shadow:0 0 0 2px var(--accent) inset;font-weight:700}
 .legend-note{font-size:12px;color:var(--dim);margin-top:8px}
 .legend-note b{color:var(--muted)}
 .empty-tip{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
@@ -217,6 +218,8 @@ h3 .gcn{font-size:15px}
         <button data-d="3" class="active">3天</button><button data-d="7">7天</button><button data-d="14">14天</button>
       </span>
     </h2>
+    <div id="nr-calendar" style="display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 4px"></div>
+    <div class="src" id="nr-cal-tip" style="margin-bottom:6px">近 60 天发售热力（颜色越深当日新游越多，点击某天筛选）<span id="nr-clear" style="display:none;margin-left:10px;cursor:pointer;color:var(--accent)">✕ 清除筛选</span></div>
     <div id="nr-body"><div class="loading">加载中…</div></div>
   </div>
 </div>
@@ -526,16 +529,46 @@ async function loadEpic(){
 }
 
 /* ============ 新发售 ============ */
-async function loadNewRel(days){
+let NR_STATE={days:3,date:null};
+function nrHeat(c,max){
+  // 0 → 透明；count 越高越亮（绿色系热力）
+  if(!c)return 'transparent';
+  const t=Math.min(1,Math.sqrt(c/(max||1)));
+  return `rgba(74,222,128,${0.15+t*0.85})`;
+}
+function nrRenderCal(calendar){
+  const max=Math.max(...calendar.map(d=>d.count),1);
+  const today=new Date().toISOString().slice(0,10);
+  $('nr-calendar').innerHTML=calendar.map(d=>{
+    const sel=d.date===NR_STATE.date;
+    return `<div class="nr-cell${sel?' sel':''}" data-date="${d.date}" title="${d.date}：${d.count} 款新发售"
+      style="width:30px;height:30px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+      font-size:10px;color:${d.count?'#0b1a10':'var(--muted)'};
+      background:${nrHeat(d.count,max)};
+      outline:${d.date===today?'2px solid var(--accent)':'none'};outline-offset:-2px">
+      ${d.date.slice(8)}</div>`;
+  }).join('');
+  document.querySelectorAll('.nr-cell').forEach(c=>c.onclick=()=>{
+    const d=c.dataset.date;
+    NR_STATE.date = NR_STATE.date===d?null:d;   // 再点一次=取消
+    loadNewRel(NR_STATE.days,true);
+  });
+}
+async function loadNewRel(days,keepDays){
+  if(!keepDays)NR_STATE.days=days;
   $('nr-body').innerHTML='<div class="loading">加载中…</div>';
   document.querySelectorAll('#nr-days button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#nr-days button').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');loadNewRel(+b.dataset.d);
+    b.classList.add('active');NR_STATE.days=+b.dataset.d;NR_STATE.date=null;loadNewRel(NR_STATE.days,true);
   });
+  $('nr-clear').onclick=()=>{NR_STATE.date=null;loadNewRel(NR_STATE.days,true);};
+  const q=NR_STATE.date?`date=${NR_STATE.date}`:`days=${NR_STATE.days}`;
   try{
-    const j=await (await fetch(`/game/api/new-releases?days=${days}`)).json();
+    const j=await (await fetch(`/game/api/new-releases?${q}`)).json();
     if(!j.ok){$('nr-body').innerHTML=j.msg;return}
-    if(!j.by_day.length){$('nr-body').innerHTML='<div class="empty-tip">窗口内无新发售</div>';return}
+    nrRenderCal(j.calendar||[]);
+    $('nr-clear').style.display=NR_STATE.date?'inline':'none';
+    if(!j.by_day.length){$('nr-body').innerHTML=`<div class="empty-tip">${NR_STATE.date?NR_STATE.date+' 无新发售记录':'窗口内无新发售'}</div>`;return}
     $('nr-body').innerHTML=j.by_day.map(d=>{
       const today=new Date().toISOString().slice(0,10);
       const isToday=d.date===today;
@@ -546,7 +579,7 @@ async function loadNewRel(days){
         <td>${(g.genres||[]).slice(0,3).map(x=>`<span class="pill">${esc(x)}</span>`).join('')||'—'}</td>
         <td><a href="https://store.steampowered.com/app/${g.game_id}" target="_blank">商店页 ↗</a></td>
       </tr>`).join('');
-      return `<h3 style="margin:14px 0 8px">${d.date} ${isToday?'<span class="pill new">今天</span>':''} <span class="src">${d.count} 款</span></h3>
+      return `<h3 style="margin:14px 0 8px">${d.date} ${isToday?'<span class="pill new">今天</span>':''}${NR_STATE.date?' <span class="pill hot">日历筛选中</span>':''} <span class="src">${d.count} 款</span></h3>
         <table><tr><th>游戏</th><th class="num-r">价格</th><th>类型</th><th>链接</th></tr>${rows}</table>`;
     }).join('');
   }catch(e){$('nr-body').innerHTML='<div class="empty-tip">加载失败</div>'}

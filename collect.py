@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS daily_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_ds_plat ON daily_stats(platform, date);
 CREATE INDEX IF NOT EXISTS idx_games_name ON games(name);
+CREATE TABLE IF NOT EXISTS steam_events (
+    event_id TEXT PRIMARY KEY,        -- 公告 gid
+    kind TEXT NOT NULL,               -- seasonal/nestfest/themed/awards/other
+    title TEXT,
+    title_cn TEXT,
+    announced_date TEXT,              -- 公告发布日（真实观测）
+    end_date TEXT,                    -- 官方正文提取的结束日（可空）
+    url TEXT,
+    fetched_at TEXT
+);
 """
 
 # 老库迁移：幂等加列
@@ -149,7 +159,8 @@ def http_json(url, timeout=25):
 
 
 def ensure_db():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=600)  # WAL 写锁等待（enrich 长事务）
+    con.execute("PRAGMA busy_timeout=600000")
     con.executescript(SCHEMA)
     con.commit()
     return con
@@ -1041,6 +1052,73 @@ def collect_new_releases(con, date, days=5, max_pages=12):
     return added, seen
 
 
+def collect_steam_events(con, date):
+    """Steam 本年度事件表：官方公告流（ISteamNews appid=593110 Steam 客户端新闻）
+    真实观测。kind 分类规则（基于官方标题用词，非猜测）：
+      seasonal  = 大促（Autumn/Winter/Summer/Spring Sale）
+      nextfest  = 新品节 Next Fest
+      themed    = 主题节（xxx Fest / Scream 等主题活动）
+      awards    = Steam 大奖
+      other     = 客户端更新等非事件公告（不入库）
+    end_date 从公告正文提取官方结束日（可空=未提及）。"""
+    url = ("https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
+           "?appid=593110&count=100&maxlength=800")
+    j = http_json(url) or {}
+    items = (j.get("appnews") or {}).get("newsitems") or []
+    month_re = re.compile(
+        r"(January|February|March|April|May|June|July|August|September|"
+        r"October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?", re.I)
+    MONTHS = {m: i + 1 for i, m in enumerate(
+        ["january", "february", "march", "april", "may", "june", "july",
+         "august", "september", "october", "november", "december"])}
+    kept = 0
+    year_now = datetime.now().year
+    for it in items:
+        title = (it.get("title") or "").strip()
+        t = title.lower()
+        if "next fest" in t:
+            kind = "nextfest"
+        elif re.search(r"(autumn|winter|summer|spring) sale", t):
+            kind = "seasonal"
+        elif "award" in t and "steam" in t:
+            kind = "awards"
+        elif re.search(r"fest|scream|_demofest", t):
+            kind = "themed"
+        else:
+            continue  # 客户端更新/杂项公告非事件
+        ann = datetime.fromtimestamp(it["date"]).strftime("%Y-%m-%d")
+        if not ann.startswith(str(year_now)):
+            continue  # 仅本年度
+        # 正文提取结束日（official wording: "through November 3rd", "October 27th at 10 a.m. PT"）
+        end_date = None
+        body = (it.get("contents") or "").replace("\n", " ")
+        for m in month_re.finditer(body):
+            mon = MONTHS.get(m.group(1).lower())
+            day = int(m.group(2))
+            if mon and day:
+                # 取不早于公告日的第一个完整日期（事件期内的日期）
+                cand_y = int(ann[:4])
+                try:
+                    import datetime as _d
+                    cand = _d.date(cand_y, mon, day)
+                    ann_d = _d.date.fromisoformat(ann)
+                    if cand >= ann_d - _d.timedelta(days=7):
+                        end_date = cand.isoformat()
+                        break
+                except ValueError:
+                    continue
+        con.execute(
+            "INSERT OR REPLACE INTO steam_events "
+            "(event_id, kind, title, title_cn, announced_date, end_date, url, fetched_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (str(it.get("gid") or it["date"]), kind, title, None, ann,
+             end_date, it.get("url"), datetime.now().isoformat(timespec="seconds")))
+        kept += 1
+    con.commit()
+    log(f"steam_events: 本年度事件 {kept} 条（公告池 {len(items)}）")
+    return kept
+
+
 def main():
     started = time.time()
     date = today()
@@ -1050,7 +1128,8 @@ def main():
     con.commit()
 
     for fn in (collect_steam, collect_steam_universe, collect_new_releases,
-               collect_roblox, collect_epic, collect_taptap, collect_insights):
+               collect_roblox, collect_epic, collect_taptap, collect_insights,
+               collect_steam_events):
         name = fn.__name__
         try:
             fn(con, date)

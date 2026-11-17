@@ -94,24 +94,27 @@ def api_overview():
 @app.route("/api/new-releases")
 def api_new_releases():
     """Steam 每日新发售（官方搜索接口 Released_DESC，真实发售日观测）。
-    days: 回看窗口（默认7）；返回按发售日倒序。"""
+    days: 回看窗口（默认7，日历热力用 60）；
+    date: 精确筛选某一天（YYYY-MM-DD，选填）。
+    返回 by_day 按发售日倒序 + calendar（60 天逐日计数，供日历渲染）。"""
     con = db()
     days = int(request.args.get("days", 7) or 7)
-    # 解析 release_date 字符串为可比日期
+    date_filter = (request.args.get("date") or "").strip()
     rows = con.execute(
         """SELECT game_id, name, name_cn, release_date, developer, genres, meta_json
            FROM games WHERE platform='steam'
            AND release_date IS NOT NULL""").fetchall()
     import datetime as dt
     from collections import defaultdict
-    cutoff = dt.date.today() - dt.timedelta(days=days)
+    # 日历窗口：60 天（覆盖两个月视图）
+    cal_cutoff = dt.date.today() - dt.timedelta(days=60)
     byday = defaultdict(list)
     for r in rows:
         try:
             d = dt.datetime.strptime(r["release_date"], "%b %d, %Y").date()
         except ValueError:
             continue
-        if d < cutoff:
+        if d < cal_cutoff:
             continue
         meta = jload(r["meta_json"], {}) or {}
         byday[d.isoformat()].append({
@@ -121,10 +124,23 @@ def api_new_releases():
             "reviews_total": meta.get("reviews_total_store"),
             "source": "Steam官方搜索接口",
         })
-    days_out = [{"date": d, "count": len(v), "games": v}
-                for d, v in sorted(byday.items(), reverse=True)]
+    # 日历：60 天逐日计数（真实观测）
+    calendar = [{"date": (dt.date.today() - dt.timedelta(days=i)).isoformat(),
+                 "count": len(byday.get((dt.date.today() - dt.timedelta(days=i)).isoformat(), []))}
+                for i in range(59, -1, -1)]
+    # 天列表：精确日期筛选 or 窗口
+    if date_filter:
+        days_out = [{"date": date_filter,
+                     "count": len(byday.get(date_filter, [])),
+                     "games": byday.get(date_filter, [])}]
+    else:
+        cutoff = dt.date.today() - dt.timedelta(days=days)
+        sel = [(d, v) for d, v in byday.items() if d >= cutoff.isoformat()]
+        days_out = [{"date": d, "count": len(v), "games": v}
+                    for d, v in sorted(sel, reverse=True)]
     con.close()
-    return jsonify({"ok": True, "days": days, "by_day": days_out})
+    return jsonify({"ok": True, "days": days, "date": date_filter or None,
+                    "calendar": calendar, "by_day": days_out})
 
 
 @app.route("/api/hot")
@@ -645,12 +661,27 @@ def api_steam_why():
                             "归因方向按阈值判定，无主观臆测"})
 
 
-@app.route("/api/steam-facets")
+@app.route("/api/steam-events")
+def api_steam_events():
+    """Steam 本年度事件表（官方公告流真实观测）。
+    kind: seasonal大促 / nextfest新品节 / themed主题节 / awards大奖。
+    announced_date=公告发布日；end_date=官方正文提取的结束日（可空）。"""
+    con = db()
+    year = request.args.get("year") or str(datetime.now().year)
+    rows = con.execute(
+        """SELECT event_id, kind, title, announced_date, end_date, url
+           FROM steam_events WHERE announced_date LIKE ?
+           ORDER BY announced_date DESC""", (year + "%",)).fetchall()
+    con.close()
+    kinds = {"seasonal": "季末大促", "nextfest": "新品节", "themed": "主题节", "awards": "Steam 大奖"}
+    return jsonify({"ok": True, "year": year, "events": [
+        {"event_id": r["event_id"], "kind": r["kind"], "kind_cn": kinds.get(r["kind"], r["kind"]),
+         "title": r["title"], "announced_date": r["announced_date"],
+         "end_date": r["end_date"], "url": r["url"]} for r in rows]})
+
+
 @app.route("/api/steam-relations")
 def api_steam_relations():
-    """厂商关系图数据：developer→publisher 合作网络（全部真实观测）。
-    节点=厂商，边=合作款数（dev≠pub）；同厂商自发行不连边。
-    top: 取合作量最大的前 N 家发行商及其全部合作开发商。"""
     con = db()
     try:
         top = min(200, max(5, int(request.args.get("top", "60"))))
@@ -702,6 +733,7 @@ def api_steam_relations():
     })
 
 
+@app.route("/api/steam-facets")
 def api_steam_facets():
     """研究页筛选面板聚合（全量口径）：宇宙规模/活跃数/年份/类型/标签/厂商。"""
     con = db()
