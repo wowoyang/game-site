@@ -77,7 +77,7 @@ tr:hover td{background:#1c2129}
   <h2>🔍 数据源说明与边界 <span class="src">有一手才展示，无则明示留空（宁缺毋假）</span></h2>
   <table>
     <tr><th>数据</th><th>一手来源</th><th>状态</th><th>说明</th></tr>
-    <tr><td>IAA 动态时间线</td><td>微信广告官方资讯流 ad.weixin.qq.com（公开 designapi）</td><td style="color:var(--up)">✅ 每日采集</td><td>官方发布的 IAA 相关产品动态/案例，30 条真实观测入库</td></tr>
+    <tr><td>IAA 动态时间线</td><td>微信广告官方资讯流 ad.weixin.qq.com（公开 designapi）</td><td style="color:var(--up)">✅ 每日采集</td><td>官方发布的 IAA 相关产品动态/案例（独立文章按 page_id 去重入库，官方池约 300 条持续筛增量）</td></tr>
     <tr><td>广告位规格</td><td>微信开放文档 developers.weixin.qq.com/minigame</td><td style="color:var(--up)">✅ 官方文档</td><td>广告位能力/规格/约束，链接直达原文</td></tr>
     <tr><td>小游戏榜单</td><td>阿拉丁指数 / 七麦数据</td><td style="color:var(--hot)">⚠️ 不可达</td><td>本服务器出口访问超时/404；微信官方无公开榜单 API。榜单类数据暂缺，不做估算</td></tr>
     <tr><td>单款游戏收入/MAU</td><td>仅官方后台（开发者私有）</td><td style="color:var(--hot)">⚠️ 无公开源</td><td>官方资讯中的案例数据（如《动物夜市》千万月流水）按官方口径原样引用并标注出处</td></tr>
