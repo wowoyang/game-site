@@ -453,6 +453,44 @@ def steam_research_page():
     return render_template("steam.html")
 
 
+@app.route("/api/wx-minigame/game")
+def api_wx_minigame_game():
+    """单款游戏详情：跨期名次轨迹 + 相关 GameLook 文章（含截图/摘要）+ 常青/爆款标签。"""
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"ok": False, "err": "name required"}), 400
+    con = db()
+    traj = [dict(rank=r[0], month=r[1]) for r in con.execute(
+        """SELECT rank, month FROM wx_minigame_rank WHERE game_name=? ORDER BY month""",
+        (name,)).fetchall()]
+    base = con.execute(
+        """SELECT publisher, cat1, cat2 FROM wx_minigame_rank WHERE game_name=? LIMIT 1""",
+        (name,)).fetchone()
+    arts = [dict(r) for r in con.execute(
+        """SELECT url, title, pub_date, snippet, images_json FROM wx_game_articles
+           WHERE game_name=? ORDER BY pub_date DESC LIMIT 4""", (name,)).fetchall()]
+    for a in arts:
+        try:
+            a["images"] = json.loads(a.pop("images_json") or "[]")
+        except Exception:
+            a["images"] = []
+    con.close()
+    best = min((t["rank"] for t in traj), default=None)
+    # 爆款判定（真实数据规则，页内标注）
+    tags = []
+    if traj:
+        if best and best <= 3:
+            tags.append("登顶款")
+        if len(traj) >= 4:
+            tags.append("常青款")
+        if len(traj) == 1 and best and best <= 20:
+            tags.append("空降爆款")
+    return jsonify({"ok": True, "name": name,
+                    "publisher": base[0] if base else "", "cat1": base[1] if base else "",
+                    "cat2": base[2] if base else "",
+                    "traj": traj, "best": best, "articles": arts, "tags": tags})
+
+
 @app.route("/wxgame")
 def wxgame_research_page():
     return render_template("wxgame.html")
