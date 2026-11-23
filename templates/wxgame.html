@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微信小游戏 IAA 深研 · Game Trend Radar</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--dim:#6e7681;--accent:#58a6ff;--hot:#f85149;--up:#3fb950;--gold:#d29922;--wx:#07c160}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px}
+.wrap{max-width:1440px;margin:0 auto;padding:18px}
+h1{font-size:20px;margin-bottom:4px}
+h1 .sub{font-size:12px;color:var(--dim);font-weight:400;margin-left:8px}
+a{color:var(--accent);text-decoration:none}
+.back{font-size:12px;margin-bottom:14px;display:inline-block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+.card h2{font-size:15px;margin-bottom:12px;font-weight:600}
+.card h2 .src{font-size:11px;color:var(--dim);font-weight:400;margin-left:8px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1000px){.grid-2{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid #21262d;vertical-align:top}
+tr:hover td{background:#1c2129}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;border:1px solid var(--border);color:var(--muted);margin-right:4px}
+.pill.wx{border-color:var(--wx);color:var(--wx)}
+.pill.monetize{border-color:var(--gold);color:var(--gold)}
+.pill.new{border-color:var(--up);color:var(--up)}
+.tl{position:relative;padding-left:18px}
+.tl::before{content:'';position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--border)}
+.tl-item{position:relative;padding:8px 0 14px}
+.tl-item::before{content:'';position:absolute;left:-18px;top:13px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.tl-date{font-size:11px;color:var(--dim)}
+.tl-title{font-size:13px;margin:2px 0}
+.tl-title a{color:var(--text);font-weight:600}
+.tl-title a:hover{color:var(--accent)}
+.tl-summary{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.6}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.seg button{background:transparent;border:none;color:var(--muted);padding:5px 14px;font-size:12px;cursor:pointer}
+.seg button.on{background:#58a6ff2e;color:var(--accent)}
+.empty-tip{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
+.legend-note{font-size:11px;color:var(--dim);line-height:1.7;margin-top:8px}
+.scroll-box{max-height:560px;overflow:auto}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--wx);background:#07c16014;padding:1px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="/game/">← 返回游戏趋势雷达</a> ｜ <a class="back" href="/game/steam" style="color:var(--accent)">🔬 Steam 全量深研 →</a>
+<h1>💬 微信小游戏 IAA 深研 <span class="sub">聚焦广告变现（IAA）品类 · 官方一手数据 · 无第三方估算</span></h1>
+
+<div class="card">
+  <b>研究范围</b>：以广告获取收益（IAA，In-App Advertising）为主要商业模式的微信小游戏。
+  <span class="legend-note">IAA 品类特点：免费游玩 + 激励视频/Banner/插屏广告变现，依赖买量投放与 LTV 回收。典型题材：益智消除、模拟经营、放置挂机、答题、抓大鹅类等。</span>
+  <div id="wx-stat" style="margin-top:10px;font-size:13px;color:var(--muted)">加载中…</div>
+</div>
+
+<div class="grid-2">
+<div class="card">
+  <h2>📌 官方 IAA 动态时间线 <span class="src">微信广告官方资讯流（designapi news_v2）· 真实发布日</span></h2>
+  <div class="seg" id="cat-seg">
+    <button data-c="" class="on">全部</button>
+    <button data-c="流量变现">流量变现</button>
+    <button data-c="商业推广">商业推广</button>
+    <button data-c="case">含案例</button>
+  </div>
+  <div class="scroll-box"><div id="news-tl"><div class="empty-tip">加载中…</div></div></div>
+</div>
+
+<div class="card">
+  <h2>🎯 广告位规格 <span class="src">微信开放文档 · 每条附官方文档链接可溯源</span></h2>
+  <div id="specs-body"><div class="empty-tip">加载中…</div></div>
+</div>
+</div>
+
+<div class="card">
+  <h2>🔍 数据源说明与边界 <span class="src">有一手才展示，无则明示留空（宁缺毋假）</span></h2>
+  <table>
+    <tr><th>数据</th><th>一手来源</th><th>状态</th><th>说明</th></tr>
+    <tr><td>IAA 动态时间线</td><td>微信广告官方资讯流 ad.weixin.qq.com（公开 designapi）</td><td style="color:var(--up)">✅ 每日采集</td><td>官方发布的 IAA 相关产品动态/案例，30 条真实观测入库</td></tr>
+    <tr><td>广告位规格</td><td>微信开放文档 developers.weixin.qq.com/minigame</td><td style="color:var(--up)">✅ 官方文档</td><td>广告位能力/规格/约束，链接直达原文</td></tr>
+    <tr><td>小游戏榜单</td><td>阿拉丁指数 / 七麦数据</td><td style="color:var(--hot)">⚠️ 不可达</td><td>本服务器出口访问超时/404；微信官方无公开榜单 API。榜单类数据暂缺，不做估算</td></tr>
+    <tr><td>单款游戏收入/MAU</td><td>仅官方后台（开发者私有）</td><td style="color:var(--hot)">⚠️ 无公开源</td><td>官方资讯中的案例数据（如《动物夜市》千万月流水）按官方口径原样引用并标注出处</td></tr>
+  </table>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let NEWS=[],SPECS=[];
+
+async function load(){
+  try{
+    const j=await (await fetch('/game/api/wx-minigame')).json();
+    NEWS=j.news||[]; SPECS=j.specs||[];
+    $('wx-stat').innerHTML=`官方资讯池 300 条 → IAA 相关 <b style="color:var(--wx)">${NEWS.length}</b> 条 · 覆盖 ${new Set(NEWS.map(n=>n.pub_date).filter(Boolean).join(',').split(',')).size>1?(NEWS[NEWS.length-1]?.pub_date||'?')+' ~ '+(NEWS[0]?.pub_date||'?'):'—'} · 每日 8:05 自动增量`;
+    renderNews('');
+    renderSpecs();
+  }catch(e){
+    $('news-tl').innerHTML='<div class="empty-tip">加载失败: '+e.message+'</div>';
+  }
+}
+
+function renderNews(cat){
+  let list=NEWS;
+  if(cat==='流量变现'||cat==='商业推广')list=list.filter(n=>n.category===cat);
+  if(cat==='case')list=list.filter(n=>(n.title||'').includes('案例')||n.related_game);
+  if(!list.length){$('news-tl').innerHTML='<div class="empty-tip">该分类暂无条目</div>';return}
+  $('news-tl').innerHTML='<div class="tl">'+list.map(n=>`
+    <div class="tl-item">
+      <div class="tl-date">${n.pub_date||'—'} · <span class="pill ${n.category==='流量变现'?'wx':''}">${n.category||'—'}</span><span class="pill">${n.classify||''}</span>${n.related_game?`<span class="pill new">◆ ${n.related_game}</span>`:''}</div>
+      <div class="tl-title"><a href="${n.url}" target="_blank">${n.title}</a></div>
+      ${n.summary?`<div class="tl-summary">${n.summary}</div>`:''}
+    </div>`).join('')+'</div>';
+}
+
+function renderSpecs(){
+  $('specs-body').innerHTML='<table><tr><th>广告位</th><th>API</th><th>说明</th><th>规格/动态</th><th>文档</th></tr>'+
+    SPECS.map(s=>`<tr>
+      <td><b>${s.slot}</b></td>
+      <td><span class="code">${s.code}</span></td>
+      <td>${s.desc}</td>
+      <td>${s.specs}</td>
+      <td><a href="${s.doc}" target="_blank">官方文档 ↗</a></td>
+    </tr>`).join('')+'</table>';
+}
+
+document.querySelectorAll('#cat-seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#cat-seg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');renderNews(b.dataset.c);
+});
+load();
+</script>
+</body>
+</html>

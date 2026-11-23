@@ -93,6 +93,19 @@ CREATE TABLE IF NOT EXISTS steam_events (
     url TEXT,
     fetched_at TEXT
 );
+CREATE TABLE IF NOT EXISTS wx_minigame_news (
+    page_id INTEGER PRIMARY KEY,      -- 微信广告官方资讯 page_id
+    title TEXT,
+    category TEXT,                    -- 资讯分类（流量变现/商业推广）
+    classify TEXT,                    -- 细分（功能更新/产品上线/案例解析…）
+    scene TEXT,                       -- 场景标签 JSON
+    pub_date TEXT,                    -- 官方发布日（真实观测）
+    url TEXT,                         -- 官方详情页
+    summary TEXT,                     -- 官方摘要（desc 提取纯文本）
+    related_game TEXT,                -- 从标题提取的游戏名（可空）
+    fetched_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wxnews_date ON wx_minigame_news(pub_date);
 """
 
 # 老库迁移：幂等加列
@@ -1119,6 +1132,82 @@ def collect_steam_events(con, date):
     return kept
 
 
+def collect_wx_minigame_news(con, date):
+    """微信小游戏 IAA 动态：微信广告官方资讯流（designapi news_v2，公开接口）。
+    只收与小游戏/IAA 变现相关的条目（标题关键词过滤，规则页内透明标注）。
+    全部为官方一手观测：标题/分类/发布日/摘要。"""
+    import urllib.request, gzip, ssl, json as _json, re, html as _H
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0",
+          "Referer": "https://ad.weixin.qq.com/", "Accept-Encoding": "gzip"}
+
+    def get(url):
+        req = urllib.request.Request(url, headers=UA)
+        r = urllib.request.urlopen(req, timeout=25, context=ctx)
+        raw = r.read()
+        if r.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8", "replace")
+
+    rows, page = [], 1
+    while page <= 5:  # 上限 500 条，官方池约 300
+        try:
+            b = get(f"https://ad.weixin.qq.com/designapi/v1/wxad/news_v2?page={page}&page_size=100")
+            d = _json.loads(b)["data"]
+            rows += d["rows"]
+            if len(rows) >= d["count"] or not d["rows"]:
+                break
+            page += 1
+        except Exception:
+            break
+
+    # 小游戏/IAA 相关关键词（标题或场景标签命中即收）
+    KW = ["小游戏", "IAA", "流量主", "激励广告", "游戏圈", "试玩", "直玩", "回流出价"]
+    def _txt(x):
+        """官方 desc 结构转纯文本（截断）"""
+        if isinstance(x, str):
+            return x[:200]
+        if isinstance(x, dict):
+            parts = []
+            for v in x.get("content", x.get("blocks", [])) if isinstance(x.get("content") or x.get("blocks"), list) else []:
+                if isinstance(v, dict):
+                    parts.append(str(v.get("text", v.get("value", ""))))
+            return ("".join(parts) or x.get("text") or "")[:200]
+        return ""
+
+    n = 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for r in rows:
+        title = (r.get("page_title") or "").strip()
+        data = r.get("data") or {}
+        nf = data.get("news_filter") or {}
+        scenes = [s for s in (nf.get("scene") or []) if isinstance(s, str)]
+        hit = any(k in title for k in KW) or any(any(k in s for k in KW) for s in scenes)
+        if not hit:
+            continue
+        ts = data.get("date")
+        pub = ""
+        if isinstance(ts, (int, float)):
+            import datetime as _dt
+            pub = _dt.datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+        related = ""
+        m = re.search(r"《([^《》]{2,16})》", title)
+        if m:
+            related = m.group(1)
+        con.execute(
+            """INSERT OR REPLACE INTO wx_minigame_news
+               (page_id, title, category, classify, scene, pub_date, url, summary, related_game, fetched_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (r.get("page_id"), title, nf.get("type") or "", nf.get("classify") or "",
+             _json.dumps(scenes, ensure_ascii=False), pub,
+             f"https://ad.weixin.qq.com/latest/article/{r.get('page_id')}",
+             _txt(data.get("desc")), related, now))
+        n += 1
+    con.commit()
+    log(f"wx_minigame_news: 官方池 {len(rows)} 条，IAA 相关入库 {n} 条")
+    return n
+
+
 def main():
     started = time.time()
     date = today()
@@ -1129,7 +1218,7 @@ def main():
 
     for fn in (collect_steam, collect_steam_universe, collect_new_releases,
                collect_roblox, collect_epic, collect_taptap, collect_insights,
-               collect_steam_events):
+               collect_steam_events, collect_wx_minigame_news):
         name = fn.__name__
         try:
             fn(con, date)

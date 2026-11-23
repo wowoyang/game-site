@@ -441,6 +441,11 @@ def steam_research_page():
     return render_template("steam.html")
 
 
+@app.route("/wxgame")
+def wxgame_research_page():
+    return render_template("wxgame.html")
+
+
 # Steam 研究排序键白名单
 # 3A 口径：publisher 命中公认大厂发行商（含子公司，LIKE 匹配）。
 # 名单为行业常识公开事实（发行商主体名称），非估算数据——口径透明标注。
@@ -729,6 +734,63 @@ def api_steam_why():
                     "factors": why,
                     "note": "全部因子来自官方/权威 API 直接观测的数值，"
                             "归因方向按阈值判定，无主观臆测"})
+
+
+# ------------------------------------------------ 微信小游戏 IAA -----
+
+WX_AD_SPECS = [
+    {"slot": "激励视频广告", "code": "createRewardedVideoAd",
+     "desc": "玩家主动观看完整视频获得游戏奖励（复活/道具/金币）",
+     "specs": "单用户曝光频控；奖励回调服务端校验",
+     "ecpm": "IAA 小游戏核心收益位（官方多次公开课强调为主力变现位）",
+     "doc": "https://developers.weixin.qq.com/minigame/dev/guide/open-ability/ad/rewarded-video-ad.html"},
+    {"slot": "Banner 广告", "code": "createBannerAd",
+     "desc": "底部/顶部横幅常驻",
+     "specs": "宽度 300~屏宽等比缩放；自动刷新间隔 ≥30 秒（官方文档实测）",
+     "ecpm": "低价高频，作为激励视频补充",
+     "doc": "https://developers.weixin.qq.com/minigame/dev/guide/open-ability/ad/banner-ad.html"},
+    {"slot": "插屏广告", "code": "createInterstitialAd",
+     "desc": "场景切换/关卡结束弹出",
+     "specs": "官方推荐在自然停顿处触发",
+     "ecpm": "中段价格，频次需克制",
+     "doc": "https://developers.weixin.qq.com/minigame/dev/guide/open-ability/ad/"},
+    {"slot": "原生模板广告", "code": "createCustomAd",
+     "desc": "融入 UI 风格的自定义样式",
+     "specs": "官方模板渲染",
+     "ecpm": "体验与收益平衡位",
+     "doc": "https://developers.weixin.qq.com/minigame/dev/guide/open-ability/ad/"},
+    {"slot": "视频贴片广告", "code": "createGridAd 等",
+     "desc": "视频内容前/中插入",
+     "specs": "依托视频能力",
+     "ecpm": "—",
+     "doc": "https://developers.weixin.qq.com/minigame/dev/guide/open-ability/ad/"},
+    {"slot": "IAA 预测组件", "code": "官方组件",
+     "desc": "买量前预测 LTV/回本周期",
+     "specs": "官方商业化工具箱 Pro 组成（2026-01 上线，官方资讯实测）",
+     "ecpm": "工具非广告位",
+     "doc": "https://ad.weixin.qq.com/"},
+    {"slot": "直玩广告", "code": "官方投放形态",
+     "desc": "无需素材、广告即试玩、直达小游戏",
+     "specs": "2026-04 上线（官方资讯实测）",
+     "ecpm": "买量侧形态，降低 IAA 获客成本",
+     "doc": "https://ad.weixin.qq.com/"},
+]
+
+
+@app.route("/api/wx-minigame")
+def api_wx_minigame():
+    """微信小游戏 IAA 研究数据。
+    news: 官方资讯时间线（微信广告 news_v2 真实观测入库）；
+    specs: 官方文档广告位规格（附文档链接可溯源）。"""
+    con = db()
+    news = [dict(r) for r in con.execute(
+        """SELECT page_id, title, category, classify, scene, pub_date, url, summary, related_game
+           FROM wx_minigame_news ORDER BY pub_date DESC""").fetchall()]
+    con.close()
+    return jsonify({"ok": True, "news": news, "specs": WX_AD_SPECS,
+                    "note": "资讯源=微信广告官方资讯流(designapi news_v2, 公开接口, 只收IAA相关); "
+                            "规格源=微信开放文档(minigame dev guide); "
+                            "榜单类(阿拉丁/七麦)出口不可达, 不做展示, 宁缺毋假"})
 
 
 @app.route("/api/steam-events")
