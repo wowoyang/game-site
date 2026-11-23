@@ -434,7 +434,19 @@ def api_popular():
     return jsonify(out)
 
 
-# --------------------------------------------------------- Steam 研究页 ----
+@app.route("/api/wx-minigame/rank")
+def api_wx_minigame_rank():
+    """微信小游戏畅销榜 Top100（GameLook 月度文章 OCR，制榜=引力引擎/微信官方日榜积分）。"""
+    con = db()
+    months = [r[0] for r in con.execute(
+        "SELECT DISTINCT month FROM wx_minigame_rank ORDER BY month DESC").fetchall()]
+    rows = [dict(r) for r in con.execute(
+        """SELECT month, rank, game_name, publisher, cat1, cat2, change, needs_review, article_url
+           FROM wx_minigame_rank ORDER BY month DESC, rank ASC""").fetchall()]
+    con.close()
+    return jsonify({"ok": True, "months": months, "rows": rows,
+                    "note": "数据源=GameLook月度《微信小游戏畅销榜Top100》文章(制榜:引力引擎,基于微信官方每日"
+                            "畅销榜名次积分); 榜单以图片发布, OCR识别入库, needs_review=1为OCR低置信行待人工复核"})
 
 @app.route("/steam")
 def steam_research_page():

@@ -106,6 +106,24 @@ CREATE TABLE IF NOT EXISTS wx_minigame_news (
     fetched_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_wxnews_date ON wx_minigame_news(pub_date);
+CREATE TABLE IF NOT EXISTS wx_minigame_cases (
+    page_id INTEGER PRIMARY KEY,      -- 官方案例 page_id
+    game_name TEXT,                   -- 官方披露的游戏名（adverName）
+    industry TEXT,                    -- 官方类型（角色扮演类/飞机射击类…）
+    tag TEXT,                         -- 官方标签（用户增长/游戏优选…）
+    title TEXT,                       -- 官方案例标题
+    effect_json TEXT,                 -- 官方效果数据 [[name,data],…]
+    avatar TEXT,                      -- 官方头像图
+    banner TEXT,                      -- 官方 banner 图
+    fetched_at TEXT
+);
+CREATE TABLE IF NOT EXISTS wx_minigame_docs (
+    page_id INTEGER PRIMARY KEY,      -- 官方文档 page_id
+    title TEXT,                       -- 文档标题（官方层级路径）
+    snippet TEXT,                     -- 官方正文摘要
+    cate_id INTEGER,
+    fetched_at TEXT
+);
 """
 
 # 老库迁移：幂等加列
@@ -1208,6 +1226,111 @@ def collect_wx_minigame_news(con, date):
     return n
 
 
+def collect_wx_minigame_cases(con, date):
+    """微信小游戏官方标杆案例：微信广告官网"优秀案例"（designapi pages?frame_id=43，公开）。
+    只收 role=minigame 的条目——官方按类型披露的标杆小游戏+官方效果数据，全部一手观测。"""
+    import urllib.request, gzip, ssl, json as _json
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0",
+          "Referer": "https://ad.weixin.qq.com/", "Accept-Encoding": "gzip"}
+
+    def get(url):
+        req = urllib.request.Request(url, headers=UA)
+        r = urllib.request.urlopen(req, timeout=25, context=ctx)
+        raw = r.read()
+        if r.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8", "replace")
+
+    n = 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        rows = _json.loads(get(
+            "https://ad.weixin.qq.com/designapi/v1/wxad/pages?frame_id=43")).get("data") or []
+    except Exception as e:
+        log(f"wx_minigame_cases: 官方案例接口失败 {e}")
+        return 0
+    for x in rows:
+        try:
+            rd = _json.loads(x.get("release_data") or "{}")
+        except Exception:
+            continue
+        f = {c.get("name"): c.get("value") for c in rd.get("content", []) if isinstance(c, dict)}
+        if (f.get("role") or "").strip() != "minigame":
+            continue
+        eff = f.get("effect")
+        if isinstance(eff, str):
+            try:
+                eff = _json.loads(eff)
+            except Exception:
+                eff = None
+        eff_norm = []
+        if isinstance(eff, list):
+            for row in eff:
+                if isinstance(row, list):
+                    d = {c.get("name"): c.get("value") for c in row if isinstance(c, dict)}
+                    if d:
+                        eff_norm.append([d.get("name", ""), d.get("data", "")])
+        con.execute(
+            """INSERT OR REPLACE INTO wx_minigame_cases
+               (page_id, game_name, industry, tag, title, effect_json, avatar, banner, fetched_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (x.get("page_id"), f.get("adverName") or "", f.get("industry") or "",
+             f.get("tag") or "", x.get("page_title") or "",
+             _json.dumps(eff_norm, ensure_ascii=False), f.get("avatar") or "",
+             f.get("bannerImg") or "", now))
+        n += 1
+    con.commit()
+    log(f"wx_minigame_cases: 官方池 {len(rows)} 条，minigame 标杆入库 {n} 条")
+    return n
+
+
+def collect_wx_minigame_docs(con, date):
+    """微信小游戏 IAA 官方文档库：微信广告站内搜索接口（公开），关键词全量收录。
+    每条含官方正文摘要（snippet），供深研页 IAA 运营知识检索。"""
+    import urllib.request, gzip, ssl, json as _json, re as _re, urllib.parse as _up
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0",
+          "Referer": "https://ad.weixin.qq.com/", "Accept-Encoding": "gzip"}
+
+    def get(url):
+        req = urllib.request.Request(url, headers=UA)
+        r = urllib.request.urlopen(req, timeout=25, context=ctx)
+        raw = r.read()
+        if r.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8", "replace")
+
+    n = 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for kw in ["小游戏流量主", "小游戏商业化工具箱", "小游戏广告组件", "小游戏回传"]:
+        page = 1
+        while page <= 3:
+            try:
+                b = get("https://ad.weixin.qq.com/designapi/v1/wxad/search?keyword="
+                        + _up.quote(kw) + f"&page={page}&page_size=20")
+                d = _json.loads(b)["data"]
+            except Exception:
+                break
+            for it in d.get("list") or []:
+                src = it.get("source") or {}
+                pid = src.get("page_id")
+                if not pid:
+                    continue
+                snip = _re.sub(r"</?hightlight>", "", it.get("search_content_highlight") or "")[:400]
+                con.execute(
+                    """INSERT OR REPLACE INTO wx_minigame_docs (page_id, title, snippet, cate_id, fetched_at)
+                       VALUES (?,?,?,?,?)""",
+                    (pid, src.get("page_title") or "", snip, src.get("cate_id"), now))
+                n += 1
+            if len(d.get("list") or []) < 20 or page * 20 >= (d.get("total") or 0):
+                break
+            page += 1
+    con.commit()
+    log(f"wx_minigame_docs: 官方文档库入库（去重后见总数）本轮写入 {n} 条")
+    return n
+
+
 def main():
     started = time.time()
     date = today()
@@ -1218,7 +1341,8 @@ def main():
 
     for fn in (collect_steam, collect_steam_universe, collect_new_releases,
                collect_roblox, collect_epic, collect_taptap, collect_insights,
-               collect_steam_events, collect_wx_minigame_news):
+               collect_steam_events, collect_wx_minigame_news,
+               collect_wx_minigame_cases, collect_wx_minigame_docs):
         name = fn.__name__
         try:
             fn(con, date)

@@ -55,6 +55,27 @@ tr:hover td{background:#1c2129}
   <div id="wx-stat" style="margin-top:10px;font-size:13px;color:var(--muted)">加载中…</div>
 </div>
 
+<div class="card">
+  <h2>🏆 畅销榜 Top100 · 各类型 Top20 <span class="src">GameLook 月度榜（制榜：引力引擎 · 基于微信官方每日畅销榜积分）· OCR 入库</span></h2>
+  <div class="seg" id="rank-month-seg" style="margin-bottom:8px"></div>
+  <div class="seg" id="rank-cat-seg" style="margin-bottom:8px"></div>
+  <div class="scroll-box">
+    <table class="tbl" id="rank-tbl" style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="text-align:left;color:var(--dim);border-bottom:1px solid #30363d">
+        <th style="padding:4px 8px">#</th><th style="padding:4px 8px">游戏</th><th style="padding:4px 8px">发行商</th>
+        <th style="padding:4px 8px">大类</th><th style="padding:4px 8px">子类</th><th style="padding:4px 8px">变动</th>
+      </tr></thead>
+      <tbody><tr><td colspan="6" class="empty-tip">加载中…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="legend-note" id="rank-note"></div>
+</div>
+
+<div class="card">
+  <h2>📈 榜单研究 <span class="src">全部指标由库内真实榜单行计算，无估算</span></h2>
+  <div id="rank-stats" style="font-size:13px;line-height:2;color:var(--muted)">加载中…</div>
+</div>
+
 <div class="grid-2">
 <div class="card">
   <h2>📌 官方 IAA 动态时间线 <span class="src">微信广告官方资讯流（designapi news_v2）· 真实发布日</span></h2>
@@ -79,7 +100,7 @@ tr:hover td{background:#1c2129}
     <tr><th>数据</th><th>一手来源</th><th>状态</th><th>说明</th></tr>
     <tr><td>IAA 动态时间线</td><td>微信广告官方资讯流 ad.weixin.qq.com（公开 designapi）</td><td style="color:var(--up)">✅ 每日采集</td><td>官方发布的 IAA 相关产品动态/案例（独立文章按 page_id 去重入库，官方池约 300 条持续筛增量）</td></tr>
     <tr><td>广告位规格</td><td>微信开放文档 developers.weixin.qq.com/minigame</td><td style="color:var(--up)">✅ 官方文档</td><td>广告位能力/规格/约束，链接直达原文</td></tr>
-    <tr><td>小游戏榜单</td><td>阿拉丁指数 / 七麦数据</td><td style="color:var(--hot)">⚠️ 不可达</td><td>本服务器出口访问超时/404；微信官方无公开榜单 API。榜单类数据暂缺，不做估算</td></tr>
+    <tr><td>小游戏榜单</td><td>GameLook 月度《微信小游戏畅销榜Top100》文章（制榜：引力引擎，数据=微信官方每日畅销榜名次积分）</td><td style="color:var(--up)">✅ 月度 OCR 入库</td><td>榜单图片→分栏逐行 OCR→结构化入库；每行带文章+原图溯源链接；OCR 低置信行标 needs_review 待复核</td></tr>
     <tr><td>单款游戏收入/MAU</td><td>仅官方后台（开发者私有）</td><td style="color:var(--hot)">⚠️ 无公开源</td><td>官方资讯中的案例数据（如《动物夜市》千万月流水）按官方口径原样引用并标注出处</td></tr>
   </table>
 </div>
@@ -129,6 +150,81 @@ document.querySelectorAll('#cat-seg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#cat-seg button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on');renderNews(b.dataset.c);
 });
+
+// ===== 畅销榜 Top100 · 各类型 Top20 =====
+let RANK=[],RANK_MONTH='',RANK_CATS=new Set();
+async function loadRank(){
+  try{
+    const j=await (await fetch('/game/api/wx-minigame/rank')).json();
+    RANK=j.rows||[];
+    if(!RANK.length){$('rank-tbl').querySelector('tbody').innerHTML='<tr><td colspan="6" class="empty-tip">榜单尚未入库</td></tr>';$('rank-stats').innerHTML='—';return}
+    RANK_MONTH=RANK[0].month;   // 默认最新期
+    RANK.forEach(r=>{const c=(r.cat1+'·'+r.cat2).replace(/·$|·undefined|·null/g,'');if(c&&c!=='·')RANK_CATS.add(c)});
+    renderMonthSeg();renderCatSeg();renderRank();renderRankStats();
+    $('rank-note').innerHTML=(j.note||'')+'；<a href="'+(RANK[0].article_url||'#')+'" target="_blank" style="color:var(--wx)">本期文章溯源 ↗</a>';
+  }catch(e){
+    $('rank-tbl').querySelector('tbody').innerHTML='<tr><td colspan="6" class="empty-tip">加载失败: '+e.message+'</td></tr>';
+  }
+}
+function renderMonthSeg(){
+  const months=[...new Set(RANK.map(r=>r.month))].sort().reverse();
+  $('rank-month-seg').innerHTML=months.map(m=>`<button data-m="${m}" class="${m===RANK_MONTH?'on':''}">${m}</button>`).join('');
+  $('rank-month-seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    RANK_MONTH=b.dataset.m;
+    $('rank-month-seg').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    renderRank();renderRankStats();
+    const cur=RANK.find(r=>r.month===RANK_MONTH);
+    if(cur){$('rank-note').innerHTML=$('rank-note').innerHTML.replace(/href="[^"]*"/,`href="${cur.article_url}"`)}
+  });
+}
+function renderCatSeg(){
+  // 当期类型集合 + 自由多选 toggle
+  const cur=RANK.filter(r=>r.month===RANK_MONTH);
+  const cats=[...new Set(cur.map(r=>r.cat1&&r.cat2?r.cat1+'·'+r.cat2:(r.cat1||'')).filter(Boolean))];
+  cats.sort((a,b)=>cur.filter(r=>(r.cat1&&r.cat2?r.cat1+'·'+r.cat2:r.cat1||'')===a).length - cur.filter(r=>(r.cat1&&r.cat2?r.cat1+'·'+r.cat2:r.cat1||'')===b).length);
+  const counts=Object.fromEntries(cats.map(c=>[c,cur.filter(r=>(r.cat1&&r.cat2?r.cat1+'·'+r.cat2:r.cat1||'')===c).length]));
+  $('rank-cat-seg').innerHTML=`<button data-c="" class="on">全部类型 (${cur.length})</button>`+
+    cats.map(c=>`<button data-c="${c}">${c} (${counts[c]})</button>`).join('');
+  $('rank-cat-seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    $('rank-cat-seg').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    renderRank(b.dataset.c||null);
+  });
+}
+function renderRank(catFilter){
+  // catFilter=null 全部（Top100）；否则该类型内按名次取前 20
+  let list=RANK.filter(r=>r.month===RANK_MONTH);
+  if(catFilter)list=list.filter(r=>(r.cat1&&r.cat2?r.cat1+'·'+r.cat2:r.cat1||'')===catFilter).slice(0,20);
+  if(!list.length){$('rank-tbl').querySelector('tbody').innerHTML='<tr><td colspan="6" class="empty-tip">该类型无条目</td></tr>';return}
+  $('rank-tbl').querySelector('tbody').innerHTML=list.map(r=>`<tr style="border-bottom:1px solid #21262d">
+    <td style="padding:4px 8px;color:${r.rank<=10?'var(--hot)':r.rank<=20?'var(--wx)':'var(--dim)'}"><b>${r.rank}</b></td>
+    <td style="padding:4px 8px">${r.game_name||'—'}${r.needs_review?' <span class="pill" title="OCR低置信">?</span>':''}</td>
+    <td style="padding:4px 8px;color:var(--muted)">${r.publisher||'—'}</td>
+    <td style="padding:4px 8px">${r.cat1||'—'}</td>
+    <td style="padding:4px 8px">${r.cat2||'—'}</td>
+    <td style="padding:4px 8px;color:var(--dim)">${r.change||'—'}</td>
+  </tr>`).join('');
+}
+function renderRankStats(){
+  const cur=RANK.filter(r=>r.month===RANK_MONTH);
+  if(!cur.length){$('rank-stats').innerHTML='—';return}
+  // 发行商集中度（真实行计算）
+  const pub={};cur.forEach(r=>{if(r.publisher)pub[r.publisher]=(pub[r.publisher]||0)+1});
+  const top=Object.entries(pub).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  // 类型分布
+  const cat={};cur.forEach(r=>{const c=r.cat1||'未识别';cat[c]=(cat[c]||0)+1});
+  const catS=Object.entries(cat).sort((a,b)=>b[1]-a[1]);
+  // 新入榜/重回榜比例
+  const fresh=cur.filter(r=>(r.change||'').includes('新')).length;
+  const back=cur.filter(r=>(r.change||'').includes('重回')||(r.change||'').includes('重新')).length;
+  const review=cur.filter(r=>r.needs_review).length;
+  $('rank-stats').innerHTML=
+    `<b style="color:var(--wx)">${RANK_MONTH} 期研究（${cur.length} 款真实观测）</b><br>`+
+    `▸ 类型结构：${catS.map(([c,n])=>`${c} ${n} 款（${(n/cur.length*100).toFixed(0)}%）`).join(' · ')}<br>`+
+    `▸ 头部发行商：${top.map(([p,n])=>`${p} ${n} 款`).join(' · ')} —— Top5 发行商合计占榜 ${(top.reduce((s,[,n])=>s+n,0)/cur.length*100).toFixed(0)}%<br>`+
+    `▸ 换血度：新入榜 ${fresh} 款 · 重回榜 ${back} 款 —— 头部固化率 ${((cur.length-fresh-back)/cur.length*100).toFixed(0)}%<br>`+
+    `▸ 数据质量：${review?`<span style="color:var(--hot)">${review} 行 OCR 低置信待复核</span>`:'全部行高置信'} · 榜单制报方=引力引擎（微信官方每日畅销榜名次积分制）`;
+}
+loadRank();
 load();
 </script>
 </body>
