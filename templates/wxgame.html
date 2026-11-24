@@ -276,7 +276,7 @@ async function openGame(name){
           <a href="${a.url}" target="_blank" style="color:var(--wx);font-size:14px">${a.title}</a>
           <span style="color:var(--dim);font-size:12px;margin-left:8px">${a.pub_date||''}</span>
           ${a.snippet?`<div style="color:var(--muted);font-size:12.5px;margin:6px 0;line-height:1.7">${a.snippet.slice(0,260)}…</div>`:''}
-          ${a.images.length?`<div style="display:flex;gap:8px;overflow-x:auto;padding:6px 0">${a.images.slice(0,8).map(u=>`<img src="${u}" loading="lazy" style="height:150px;border-radius:6px;border:1px solid #30363d;flex:none" referrerpolicy="no-referrer">`).join('')}</div>`:''}
+          ${a.images.length?`<div style="display:flex;gap:8px;overflow-x:auto;padding:6px 0">${a.images.slice(0,8).map(u=>`<img src="/game/wximg?u=${encodeURIComponent(u)}" loading="lazy" style="height:150px;border-radius:6px;border:1px solid #30363d;flex:none">`).join('')}</div>`:''}
         </div>`;
       }
     }else{

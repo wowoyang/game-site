@@ -8,9 +8,10 @@ import json
 import os
 import sqlite3
 import time
+import urllib.request
 from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, request, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template, send_from_directory, Response
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, "games.db")
@@ -451,6 +452,24 @@ def api_wx_minigame_rank():
 @app.route("/steam")
 def steam_research_page():
     return render_template("steam.html")
+
+
+@app.route("/wximg")
+def wximg_proxy():
+    """GameLook 图床有防盗链（无 Referer 403）→ 服务器代理转发，附正确 Referer。"""
+    u = request.args.get("u", "")
+    if not u.startswith(("http://img.gamelook.com.cn/", "https://img.gamelook.com.cn/")):
+        return jsonify({"ok": False}), 400
+    req = urllib.request.Request(u, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0",
+        "Referer": "http://www.gamelook.com.cn/"})
+    try:
+        r = urllib.request.urlopen(req, timeout=15)
+        data = r.read()
+        return Response(data, mimetype=r.headers.get("Content-Type", "image/jpeg"),
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception:
+        return jsonify({"ok": False}), 502
 
 
 @app.route("/api/wx-minigame/game")
