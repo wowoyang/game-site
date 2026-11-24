@@ -130,6 +130,21 @@ tr:hover td{background:#1c2129}
     <div class="card" style="grid-column:1/-1"><h2>📅 Steam 年度事件表 <span class="src">Valve 官方公告流（ISteamNews）真实观测 · 公告日+官方结束日 · 每日采集</span></h2><div id="events-body"><div class="loading">加载中…</div></div></div>
   </div>
 
+  <!-- ═══ 独立游戏研究（Valve 自标 Indie 全量真实观测）═══ -->
+  <div class="card" style="grid-column:1/-1"><h2>🧩 独立游戏研究 <span class="src" id="indie-src">Valve 官方 genres 自标 Indie · 评分数=规模代理 · 全部真实观测</span></h2><div id="indie-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px"></div></div>
+  <div class="grid-2">
+    <div class="card"><h2>👑 独立游戏规模榜 Top20 <span class="src">按 Steam 评分数（≈玩家规模真实代理）· 好评率并列</span></h2><div id="indie-top" style="max-height:560px;overflow-y:auto"></div></div>
+    <div class="card"><h2>⭐ 口碑分层 <span class="src">独立游戏好评率结构（对比全站样本）</span></h2><div id="c-indie-score" class="chart"></div><div id="indie-score-note" style="font-size:11px;color:var(--dim);padding:4px 8px"></div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h2>💵 价格结构 × 口碑 <span class="src">定价带内的平均好评率（数量=该价位独立游戏数）</span></h2><div id="c-indie-price" class="chart"></div></div>
+    <div class="card"><h2>📈 发行年份供给 <span class="src">每年独立游戏新发售数 · 深色=其中好评率95%+</span></h2><div id="c-indie-years" class="chart"></div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h2>🏅 头部独立厂商 <span class="src">按旗下游戏评分数合计 Top15（条内=款数·平均好评率）</span></h2><div id="indie-devs" style="max-height:520px;overflow-y:auto"></div></div>
+    <div class="card"><h2>🕰️ 长青验证 <span class="src">发售 5 年+ 且当前峰值在线 >1000 的独立游戏</span></h2><div id="indie-evergreen" style="max-height:520px;overflow-y:auto"></div></div>
+  </div>
+
   <div class="card">
     <h2>📋 全字段明细 <span class="src">全量宇宙 · 服务端排序分页 · 点列头排序 · 点游戏名开详情</span></h2>
     <div class="table-scroll"><table id="t-detail"></table></div>
@@ -495,6 +510,88 @@ boot();
     $('events-body').innerHTML=`<table><tr><th>公告日</th><th>结束日</th><th>类型</th><th>事件</th><th>状态</th><th>链接</th></tr>${rows}</table>
       <div style="font-size:11px;color:var(--dim);padding:6px 2px">${j.year} 年共 ${j.events.length} 个事件（大促/新品节/主题节/大奖，源自 Valve 官方公告；结束日为公告正文中的官方日期，未提及则留空）</div>`;
   }catch(e){$('events-body').textContent='事件表加载失败: '+e.message}
+})();
+
+// ═════════ 独立游戏研究 ═════════
+// 独立研究榜不在分页样本内 → 走单款详情 API 开弹层（复用 #modal-mask）
+async function openIndieDetail(gid){
+  $('modal-mask').classList.add('show');
+  $('modal-body').innerHTML='<div class="loading">加载中…</div>';
+  try{
+    const j=await (await fetch('/game/api/game/steam/'+gid)).json();
+    if(!j.ok){$('modal-body').innerHTML='<div class="empty-tip">'+esc(j.msg||'未收录')+'</div>';return false}
+    const g=j.game||j;
+    const m=g.meta||{};
+    const hist=(j.history||[]);
+    const last=hist.length?hist[hist.length-1]:{};
+    const kv=[];
+    if(m.userscore!=null)kv.push(['好评率',m.userscore+'%']);
+    if(m.positive!=null)kv.push(['👍/👎',fmt(m.positive)+' / '+fmt(m.negative)]);
+    if(last.reviews_total!=null)kv.push(['累计评论',fmt(last.reviews_total)]);
+    if(last.peak_in_game!=null)kv.push(['峰值在线',fmt(last.peak_in_game)]);
+    if(m.price_usd!=null)kv.push(['价格','$'+m.price_usd]);
+    if(g.developer)kv.push(['开发商',esc(g.developer)]);
+    if(g.publisher)kv.push(['发行商',esc(g.publisher)]);
+    if(g.release_date)kv.push(['发售日',esc(g.release_date)]);
+    if(g.desc_cn)kv.push(['简介','<span style="color:var(--muted);font-size:12.5px">'+esc(g.desc_cn.slice(0,300))+'</span>']);
+    $('modal-body').innerHTML=`<h2 style="margin:0 0 6px;font-size:18px">${esc(g.name_cn||g.name)}</h2>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:12px">${esc(g.name)}</div>
+      <table>${kv.map(x=>`<tr><td style="color:var(--muted);width:120px">${x[0]}</td><td>${x[1]}</td></tr>`).join('')}</table>
+      <div style="margin-top:14px"><a href="https://store.steampowered.com/app/${gid}" target="_blank" style="color:var(--accent);font-size:13px">Steam 商店页 ↗</a></div>`;
+  }catch(e){$('modal-body').innerHTML='<div class="empty-tip">加载失败</div>'}
+  return false;
+}
+window.openIndieDetail=openIndieDetail;
+(async()=>{
+try{
+  const j=await (await fetch('/game/api/steam/indie-research')).json();
+  if(!j.ok) return;
+  $('indie-src').textContent=`Valve 官方 genres 自标 Indie · ${fmt(j.universe)} 款全量（${fmt(j.n_rated)} 款有真实评分 / ${fmt(j.n_unrated)} 款无评分不计入口碑）· 快照 ${j.date} · 全部真实观测`;
+  // 概览指标卡
+  const n95=j.score_bands.find(b=>b.band.startsWith('95'))?.n||0;
+  const nAll=j.score_bands.reduce((s,b)=>s+b.n,0);
+  const free=j.price_bands.find(b=>b.band==='免费')?.n||0;
+  const topDev=j.top_devs[0];
+  $('indie-stats').innerHTML=[
+    ['独立游戏总量',fmt(j.universe),'Valve 自标 Indie'],
+    ['有真实评分',fmt(j.n_rated),`占 ${Math.round(j.n_rated*100/j.universe)}%（${fmt(j.n_unrated)} 款无评分不纳入）`],
+    ['好评率 95%+',fmt(n95),`占有评分 ${Math.round(n95*100/nAll)}%`],
+    ['免费款',fmt(free),'定价 $0'],
+    ['规模最大独立厂商',esc(topDev?topDev.dev:'—'),`${topDev.games} 款 · 累计 ${fmt(topDev.rev)} 评 · 均分 ${topDev.avg_us}%`]
+  ].map(x=>`<div class="stat"><div style="font-size:17px;font-weight:700;color:var(--accent)">${x[1]}</div><div style="font-size:12px;color:var(--muted)">${x[0]}</div><div style="font-size:11px;color:var(--dim)">${x[2]}</div></div>`).join('');
+  // 规模榜 Top20
+  const usTxt=g=>g.userscore>0?g.userscore+'%':'<span style="color:var(--dim)">无评分</span>';
+  $('indie-top').innerHTML=`<table><tr><th>#</th><th>游戏</th><th>评分数</th><th>好评率</th><th>厂商</th><th>发售</th></tr>${
+    j.top_reviews.map((g,i)=>`<tr><td>${i+1}</td><td><a href="#" onclick="return openIndieDetail('${g.game_id}')" style="color:var(--accent)">${esc(g.name_cn||g.name)}</a></td><td>${fmt(g.reviews_total)}</td><td>${usTxt(g)}</td><td style="color:var(--muted)">${esc(g.developer||'—')}</td><td style="color:var(--dim)">${esc(g.release_date||'—')}</td></tr>`).join('')}</table>`;
+  // 口碑分层
+  chartOf('c-indie-score').setOption({tooltip:{trigger:'axis'},grid:{left:8,right:16,top:30,bottom:8,containLabel:true},
+    xAxis:{type:'category',data:j.score_bands.map(b=>b.band),axisLabel:{color:'#8b949e',fontSize:11}},
+    yAxis:{type:'value',axisLabel:{color:'#8b949e'}},
+    series:[{type:'bar',data:j.score_bands.map(b=>({value:b.n,itemStyle:{color:b.band.startsWith('95')?'#d29922':'#58a6ff'}})),barMaxWidth:44,
+      label:{show:true,position:'top',color:'#8b949e',fontSize:11,formatter:p=>fmt(p.value)}}]});
+  $('indie-score-note').textContent=`口碑呈"金字塔"结构：95%+ 带仅 ${fmt(n95)} 款（${nAll?Math.round(n95*100/nAll):0}%），但规模榜 Top20 里 95%+ 占 ${j.top_reviews.filter(g=>g.userscore>=95).length} 席——高分≠小众，头部独立游戏几乎都是口碑神作。`;
+  // 价格结构
+  chartOf('c-indie-price').setOption({tooltip:{trigger:'axis',formatter:p=>`${p[0].name}<br>数量 ${fmt(p[0].value)} 款（${fmt(j.price_bands[p[0].dataIndex].n_rated)} 款有评分）<br>平均好评率 ${p[1].value==null?'无评分数据':p[1].value+'%'}`},
+    legend:{data:['款数','平均好评率'],textStyle:{color:'#8b949e',fontSize:11}},
+    grid:{left:8,right:8,top:36,bottom:8,containLabel:true},
+    xAxis:{type:'category',data:j.price_bands.map(b=>b.band),axisLabel:{color:'#8b949e'}},
+    yAxis:[{type:'value',axisLabel:{color:'#8b949e'}},{type:'value',max:100,min:0,axisLabel:{color:'#8b949e'},splitLine:{show:false}}],
+    series:[{name:'款数',type:'bar',data:j.price_bands.map(b=>b.n),itemStyle:{color:'#58a6ff'},barMaxWidth:36},
+      {name:'平均好评率',type:'line',yAxisIndex:1,data:j.price_bands.map(b=>b.avg_us==null?null:+b.avg_us.toFixed(1)),itemStyle:{color:'#d29922'},label:{show:true,color:'#d29922',fontSize:11,formatter:p=>p.value+'%'}}]});
+  // 年份供给
+  chartOf('c-indie-years').setOption({tooltip:{trigger:'axis'},legend:{data:['新发售','其中95%+'],textStyle:{color:'#8b949e',fontSize:11}},
+    grid:{left:8,right:8,top:36,bottom:8,containLabel:true},
+    xAxis:{type:'category',data:j.by_year.map(b=>b.y),axisLabel:{color:'#8b949e'}},
+    yAxis:{type:'value',axisLabel:{color:'#8b949e'}},
+    series:[{name:'新发售',type:'bar',stack:'s',data:j.by_year.map(b=>b.n),itemStyle:{color:'#1f6feb'},barMaxWidth:30},
+      {name:'其中95%+',type:'bar',stack:'s',data:j.by_year.map(b=>b.n95),itemStyle:{color:'#d29922'}}]});
+  // 头部厂商
+  $('indie-devs').innerHTML=`<table><tr><th>厂商</th><th>款数</th><th>累计评分数</th><th>平均好评率</th></tr>${
+    j.top_devs.map(d=>`<tr><td>${esc(d.dev)}</td><td>${d.games}</td><td>${fmt(d.rev)}</td><td>${d.avg_us==null?'无评分':d.avg_us+'%'}</td></tr>`).join('')}</table>`;
+  // 长青
+  $('indie-evergreen').innerHTML=`<table><tr><th>游戏</th><th>发售</th><th>当前峰值在线</th><th>评分数</th><th>好评率</th></tr>${
+    j.evergreen.map(g=>`<tr><td><a href="#" onclick="return openIndieDetail('${g.game_id}')" style="color:var(--accent)">${esc(g.name)}</a></td><td style="color:var(--dim)">${esc(g.release_date)}</td><td>${fmt(g.peak_in_game)}</td><td>${fmt(g.reviews_total)}</td><td>${usTxt(g)}</td></tr>`).join('')}</table>`;
+}catch(e){console.error('indie research',e)}
 })();
 </script>
 </body>

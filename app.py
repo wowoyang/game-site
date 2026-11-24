@@ -454,6 +454,61 @@ def steam_research_page():
     return render_template("steam.html")
 
 
+@app.route("/api/steam/indie-research")
+def api_steam_indie_research():
+    """独立游戏研究：Valve 自标 Indie 全量真实观测（评分数≈规模代理、好评率、价格、年份、头部厂商）。"""
+    con = db()
+    latest = con.execute("SELECT MAX(date) FROM daily_stats").fetchone()[0]
+    INDIE = "g.platform='steam' AND g.genres LIKE '%\"Indie\"%'"
+    # userscore=0 是"无评分"脏值（SteamSpy 对无评价游戏返 0），必须排除——只统计真实评分
+    US = "CAST(json_extract(g.meta_json,'$.userscore') AS INTEGER)"
+    pj = "CAST(json_extract(g.meta_json,'$.price_usd') AS REAL)"
+    def rows(sql, *p):
+        return [dict(r) for r in con.execute(sql, p).fetchall()]
+    out = {"ok": True, "date": latest}
+    out["universe"] = con.execute(f"SELECT COUNT(*) FROM games g WHERE {INDIE}").fetchone()[0]
+    out["n_rated"] = con.execute(f"SELECT COUNT(*) FROM games g WHERE {INDIE} AND {US}>0").fetchone()[0]
+    out["n_unrated"] = out["universe"] - out["n_rated"]
+    # 头部规模榜（评分数真实观测）
+    out["top_reviews"] = rows(f"""SELECT g.game_id, g.name, g.name_cn, g.developer, g.release_date, d.reviews_total,
+        {US} userscore, {pj} price
+        FROM games g JOIN daily_stats d ON d.game_id=g.game_id AND d.date=?
+        WHERE {INDIE} AND d.reviews_total>0 ORDER BY d.reviews_total DESC LIMIT 20""", latest)
+    # 好评率分层（口碑结构，仅真实评分）
+    out["score_bands"] = rows(f"""SELECT CASE
+        WHEN us>=95 THEN '95%+（口碑神作）' WHEN us>=85 THEN '85-95%'
+        WHEN us>=70 THEN '70-85%' WHEN us>=50 THEN '50-70%' ELSE '<50%' END band, COUNT(*) n
+        FROM (SELECT {US} us FROM games g WHERE {INDIE} AND {US}>0)
+        GROUP BY band ORDER BY MIN(us) DESC""")
+    # 价格结构（口碑均值仅对有评分的计算）
+    out["price_bands"] = rows(f"""SELECT CASE WHEN {pj}=0 THEN '免费' WHEN {pj}<=5 THEN '≤$5'
+        WHEN {pj}<=15 THEN '$5-15' WHEN {pj}<=30 THEN '$15-30' ELSE '>$30' END band, COUNT(*) n,
+        ROUND(AVG(CASE WHEN {US}>0 THEN {US} END),1) avg_us, SUM({US}>0) n_rated
+        FROM games g WHERE {INDIE} AND json_extract(g.meta_json,'$.price_usd') IS NOT NULL
+        GROUP BY band ORDER BY MIN({pj})""")
+    # 发行年份（供给趋势）
+    out["by_year"] = rows(f"""SELECT substr(g.release_date,-4) y, COUNT(*) n,
+        SUM({US}>=95) n95, SUM({US}>0) n_rated
+        FROM games g WHERE {INDIE} AND g.release_date GLOB '*[0-9][0-9][0-9][0-9]'
+          AND substr(g.release_date,-4) BETWEEN '2010' AND '2026'
+        GROUP BY y ORDER BY y""")
+    # 头部独立厂商（按评分数合计；均值仅真实评分）
+    out["top_devs"] = rows(f"""SELECT g.developer dev, COUNT(*) games, SUM(d.reviews_total) rev,
+        ROUND(AVG(CASE WHEN {US}>0 THEN {US} END),1) avg_us
+        FROM games g JOIN daily_stats d ON d.game_id=g.game_id AND d.date=?
+        WHERE {INDIE} AND d.reviews_total>0 AND g.developer IS NOT NULL AND g.developer!=''
+        GROUP BY g.developer HAVING games>=1 ORDER BY rev DESC LIMIT 15""", latest)
+    # 长青验证：发售 5 年+ 仍在榜（当前快照有 CCU）
+    out["evergreen"] = rows(f"""SELECT g.game_id, g.name, g.release_date, d.peak_in_game, d.reviews_total,
+        {US} userscore
+        FROM games g JOIN daily_stats d ON d.game_id=g.game_id AND d.date=?
+        WHERE {INDIE} AND d.peak_in_game>1000
+          AND g.release_date GLOB '*[0-9][0-9][0-9][0-9]' AND substr(g.release_date,-4)<='2021'
+        ORDER BY d.peak_in_game DESC LIMIT 12""", latest)
+    con.close()
+    return jsonify(out)
+
+
 @app.route("/api/wx-minigame/iaa")
 def api_wx_iaa_research():
     """IAA 独立/个人爆款研究数据（官方大盘 stats + 爆款案例 + 方法论，全部 GameLook 溯源）。"""
