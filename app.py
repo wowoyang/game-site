@@ -454,6 +454,18 @@ def steam_research_page():
     return render_template("steam.html")
 
 
+@app.route("/api/wx-minigame/iaa")
+def api_wx_iaa_research():
+    """IAA 独立/个人爆款研究数据（官方大盘 stats + 爆款案例 + 方法论，全部 GameLook 溯源）。"""
+    con = db()
+    rows = [dict(r) for r in con.execute(
+        """SELECT kind, title, metric, detail, source_url, source_date FROM wx_iaa_research
+           ORDER BY CASE kind WHEN 'stat' THEN 0 WHEN 'case' THEN 1 ELSE 2 END, source_date DESC"""
+    ).fetchall()]
+    con.close()
+    return jsonify({"ok": True, "rows": rows})
+
+
 @app.route("/wximg")
 def wximg_proxy():
     """GameLook 图床有防盗链（无 Referer 403）→ 服务器代理转发，附正确 Referer。"""

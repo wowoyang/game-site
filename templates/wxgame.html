@@ -97,6 +97,20 @@ tr:hover td{background:#1c2129}
   <div class="legend-note">方法论：结构=9 期类型份额均值与 Top10/腰部对比；生命周期=132 款跨期游戏名次轨迹聚类；趋势=份额时序外推。数据边界：榜单为畅销(IAP)口径，IAA 纯广告变现款不在此榜，趋势结论不覆盖 IAA 纯休闲长尾。</div>
 </div>
 
+<div class="card">
+  <h2> indie 独立/个人爆款研究 <span class="src">IAA（广告变现）口径 · 官方大盘 + 真实案例 + 从业者方法论 · 全部 GameLook 溯源</span></h2>
+  <div id="iaa-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px"></div>
+  <div style="font-size:13.5px;line-height:2;color:var(--muted)">
+    <b style="color:var(--wx)">为什么 IAA 是独立/个人开发者的主赛道</b><br>
+    ▸ <b>门槛结构</b>：微信小游戏 40 万开发者中 <b>8 成是 30 人以下小团队</b>；季度流水千万产品 300+ 款中 <b>80%+ 来自中小团队</b>——IAA 无需版号预期、无内购支付门槛，广告分成即收益。<br>
+    ▸ <b>用户池</b>：IAA 小游戏月活 4 亿（IAP 3 亿），且 <b>70% 玩家只玩 IAA</b>——泛用户触达是独立开发者的机会窗口。<br>
+    ▸ <b>变现结构</b>：2025 小程序游戏市场 232.76 亿元中广告变现 79.73 亿（34.3%），IAA 盘仍在增长（+30%）。
+    <b style="color:var(--wx)">独立爆款的真实样本（点击可看详情）</b>
+  </div>
+  <div id="iaa-cases"></div>
+  <div class="legend-note">口径说明：本节数据为 IAA（广告变现）生态官方数据与 GameLook 报道的爆款案例，流水/DAU 均为媒体披露真实观测值，无估算。榜单（Top100 畅销榜）为 IAP 口径，与本节 IAA 口径互补。</div>
+</div>
+
 <div class="grid-2">
 <div class="card">
   <h2>📌 官方 IAA 动态时间线 <span class="src">微信广告官方资讯流（designapi news_v2）· 真实发布日</span></h2>
@@ -289,6 +303,32 @@ async function openGame(name){
   }
 }
 window.openGame=openGame;
+
+// ===== IAA 独立爆款研究 =====
+async function loadIaa(){
+  try{
+    const j=await (await fetch('/game/api/wx-minigame/iaa')).json();
+    if(!j.ok) return;
+    const stats=j.rows.filter(r=>r.kind==='stat');
+    const cases=j.rows.filter(r=>r.kind==='case');
+    const methods=j.rows.filter(r=>r.kind==='method');
+    $('iaa-stats').innerHTML=stats.map(s=>`<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px">
+      <div style="font-size:20px;font-weight:700;color:var(--wx)">${s.metric}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5">${s.title}</div>
+      <a href="${s.source_url}" target="_blank" style="font-size:11px;color:var(--dim)">来源 ${s.source_date} ↗</a></div>`).join('');
+    $('iaa-cases').innerHTML=
+      cases.map(c=>`<div style="border:1px solid #21262d;border-radius:8px;padding:10px 14px;margin:8px 0;background:#0d1117">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <b style="color:var(--fg)">${c.title}</b>
+          <span class="pill" style="background:#1a7f3726;color:var(--wx);border:1px solid #1a7f3766">${c.metric}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.8">${c.detail}</div>
+        <a href="${c.source_url}" target="_blank" style="font-size:11px;color:var(--dim)">GameLook ${c.source_date} ↗</a></div>`).join('')+
+      (methods.length?`<div style="margin-top:12px;font-size:12.5px;color:var(--muted)">
+        <b style="color:var(--wx)">从业者方法论：</b>${methods.map(m=>`<a href="${m.source_url}" target="_blank" style="color:var(--muted);text-decoration:none;border-bottom:1px dotted #58a6ff80">${m.title}</a>`).join(' · ')}</div>`:'');
+  }catch(e){}
+}
+loadIaa();
 </script>
 </body>
 </html>
